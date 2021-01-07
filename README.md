@@ -11,7 +11,9 @@ and
 ### Create Your Own Branch
 
 Pull this repository to your local disk:
-  ``` git clone https://github.com/Henry1iu/TNT-Trajectory-Predition.git```
+```
+git clone https://github.com/Henry1iu/TNT-Trajectory-Predition.git
+```
 
 Create your own branch and set your up stream using push:
 ``` 
