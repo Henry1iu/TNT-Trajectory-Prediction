@@ -48,3 +48,16 @@ git merge main
 ```
 The changes should be automaticly merged to your own branch.
 If you find there is conflict, ask me for help. 
+
+### TODO
+Data-related:
+- [ ] Data Loading
+- [ ] Data Pre-processing
+
+Model-related:
+- [ ] Add the GNN network in the implementation
+- [ ] Add the auxiliary recovery prediction in training
+
+Training-related:
+- [ ] Implement a trainer
+- [ ] Implement the loss function with the auxiliary loss
