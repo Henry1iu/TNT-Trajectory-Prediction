@@ -76,7 +76,6 @@ class GraphDataset(InMemoryDataset):
         data_path_ls = sorted(get_data_path_ls(self.root))
 
         valid_len_ls = []
-        valid_len_ls = []
         data_ls = []
         for data_p in tqdm(data_path_ls):
             if not data_p.endswith('pkl'):
