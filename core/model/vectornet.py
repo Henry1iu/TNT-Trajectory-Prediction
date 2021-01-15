@@ -9,6 +9,7 @@ import random
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch_geometric.data import DataLoader, Data
 
 from core.model.layers.global_graph import GlobalGraph
@@ -16,15 +17,27 @@ from core.model.layers.subgraph import SubGraph
 from core.dataloader.dataset import GraphDataset, GraphData
 
 
-class HGNN(nn.Module):
+class VectorNet(nn.Module):
     """
     hierarchical GNN with trajectory prediction MLP
     """
 
-    def __init__(self, in_channels, out_channels, num_subgraph_layres=3, num_global_graph_layer=1, subgraph_width=64,
-                 global_graph_width=64, traj_pred_mlp_width=64):
-        super(HGNN, self).__init__()
+    def __init__(self,
+                 in_channels=8,
+                 pred_len=30,
+                 num_subgraph_layres=3,
+                 num_global_graph_layer=1,
+                 subgraph_width=64,
+                 global_graph_width=64,
+                 traj_pred_mlp_width=64,
+                 with_aux: bool = False):
+        super(VectorNet, self).__init__()
+        # some params
         self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
+        self.out_channels = 2
+        self.pred_len = pred_len
+        self.subgraph_width = subgraph_width
+        self.max_n_guesses = 1
 
         # subgraph feature extractor
         self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
@@ -39,16 +52,18 @@ class HGNN(nn.Module):
             nn.Linear(global_graph_width, traj_pred_mlp_width),
             nn.LayerNorm(traj_pred_mlp_width),
             nn.ReLU(),
-            nn.Linear(traj_pred_mlp_width, out_channels)
+            nn.Linear(traj_pred_mlp_width, self.pred_len * self.out_channels)
         )
 
         # auxiliary recoverey mlp
-        self.aux_mlp = nn.Sequential(
-            nn.Linear(global_graph_width, traj_pred_mlp_width),
-            nn.LayerNorm(traj_pred_mlp_width),
-            nn.ReLU(),
-            nn.Linear(traj_pred_mlp_width, subgraph_width)
-        )
+        self.with_aux = with_aux
+        if self.with_aux:
+            self.aux_mlp = nn.Sequential(
+                nn.Linear(global_graph_width, traj_pred_mlp_width),
+                nn.LayerNorm(traj_pred_mlp_width),
+                nn.ReLU(),
+                nn.Linear(traj_pred_mlp_width, subgraph_width)
+            )
 
     def forward(self, data):
         """
@@ -63,7 +78,7 @@ class HGNN(nn.Module):
         x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
 
         # TODO: compute the adjacency matrix???
-        global_graph_data = Data(x=x, valid_lens=valid_lens, time_step_len=time_step_len)
+        global_graph_data = Data(x=F.normalize(x), valid_lens=valid_lens, time_step_len=time_step_len)
         if self.training:
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
@@ -75,9 +90,13 @@ class HGNN(nn.Module):
             x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
             pred = self.traj_pred_mlp(x[:, [0]].squeeze(1))
-            aux_out = self.aux_mlp(x[:, [0]].squeeze(1))
+            if self.with_aux:
+                aux_out = self.aux_mlp(x[:, [0]].squeeze(1))
 
-            return pred, aux_out, mask_polyline_feat
+                return pred, aux_out, mask_polyline_feat
+            else:
+                return pred, None, None
+
         else:
             global_graph_out = self.global_graph(global_graph_data)
             x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
@@ -95,11 +114,11 @@ if __name__ == "__main__":
     decay_lr_factor = 0.9
     decay_lr_every = 10
     lr = 0.005
-    in_channels, out_channels = 8, 60
+    in_channels, pred_len = 8, 30
     show_every = 10
     os.chdir('..')
     # get model
-    model = HGNN(in_channels, out_channels).to(device)
+    model = VectorNet(in_channels, pred_len).to(device)
     model.train()
 
     DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
@@ -109,7 +128,7 @@ if __name__ == "__main__":
     data_iter = DataLoader(dataset, batch_size=batch_size)
     for data in data_iter:
         out, aux_out, mask_feat_gt = model(data)
-        print("Evaluation Pass")
+        print("Training Pass")
 
     model.eval()
     for data in data_iter:

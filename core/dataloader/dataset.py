@@ -145,8 +145,8 @@ if __name__ == "__main__":
         dataset_input_path = os.path.join(
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
-        dataset = GraphDataset(dataset_input_path)
-        batch_iter = DataLoader(dataset, batch_size=2)
-        batch = next(iter(batch_iter))
-
+        dataset = GraphDataset(dataset_input_path).shuffle()
+        batch_iter = DataLoader(dataset, batch_size=2, num_workers=2, shuffle=True, pin_memory=True)
+        for i, data in tqdm(enumerate(batch_iter)):
+            print("{}".format(i))
 # %%
