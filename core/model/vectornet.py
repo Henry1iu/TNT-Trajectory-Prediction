@@ -5,13 +5,13 @@
 # Modification: Add auxiliary layer and loss
 
 import os
+import random
 
 import torch
 import torch.nn as nn
-from torch_geometric.data import DataLoader
-# from core.dataloader import GraphDataset
+from torch_geometric.data import DataLoader, Data
 
-from core.model.layers.selfatten import SelfAttentionLayer
+from core.model.layers.global_graph import GlobalGraph
 from core.model.layers.subgraph import SubGraph
 from core.dataloader.dataset import GraphDataset, GraphData
 
@@ -29,16 +29,10 @@ class HGNN(nn.Module):
         # subgraph feature extractor
         self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
 
-        self.self_atten_layer = SelfAttentionLayer(self.polyline_vec_shape,
-                                                   global_graph_width,
-                                                   need_scale=False)
-        # # Global GNN network
-        # self_atten_layer_list = []
-        # for i in range(num_global_graph_layer):
-        #     self_atten_layer_list.append(SelfAttentionLayer(self.polyline_vec_shape,
-        #                                                     global_graph_width,
-        #                                                     need_scale=False))
-        # self.self_atten_layer = nn.Sequential(*self_atten_layer_list)
+        # global graph
+        self.global_graph = GlobalGraph(self.polyline_vec_shape,
+                                        global_graph_width,
+                                        num_global_layers=num_global_graph_layer)
 
         # pred mlp
         self.traj_pred_mlp = nn.Sequential(
@@ -53,7 +47,7 @@ class HGNN(nn.Module):
             nn.Linear(global_graph_width, traj_pred_mlp_width),
             nn.LayerNorm(traj_pred_mlp_width),
             nn.ReLU(),
-            nn.Linear(traj_pred_mlp_width, out_channels)
+            nn.Linear(traj_pred_mlp_width, subgraph_width)
         )
 
     def forward(self, data):
@@ -63,21 +57,33 @@ class HGNN(nn.Module):
         """
         time_step_len = int(data.time_step_len[0])
         valid_lens = data.valid_len
+        # edge_index = data.edge_index
+
         sub_graph_out = self.subgraph(data)
         x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
 
+        # TODO: compute the adjacency matrix???
+        global_graph_data = Data(x=x, valid_lens=valid_lens, time_step_len=time_step_len)
         if self.training:
             # mask out the features for a random subset of polyline nodes
+            # for one batch, we mask the same polyline features
+            mask_id = random.randint(0, time_step_len-1)
+            mask_polyline_feat = x[:, mask_id, :]
+            global_graph_data.x[:, mask_id, :] = 0.0
 
-            # global GNN
-            out = self.self_atten_layer(x, valid_lens)
+            global_graph_out = self.global_graph(global_graph_data)
+            x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
-            pred = self.traj_pred_mlp(out[:, [0]].squeeze(1))
+            pred = self.traj_pred_mlp(x[:, [0]].squeeze(1))
+            aux_out = self.aux_mlp(x[:, [0]].squeeze(1))
 
-            aux_out = self.aux_mlp(out[:, [0]].squeeze(1))
+            return pred, aux_out, mask_polyline_feat
         else:
-            out = self.self_atten_layer(x, valid_lens)
-            pred = self.traj_pred_mlp(out[:, [0]].squeeze(1))
+            global_graph_out = self.global_graph(global_graph_data)
+            x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+
+            pred = self.traj_pred_mlp(x[:, [0]].squeeze(1))
+
             return pred
 
 
@@ -94,7 +100,7 @@ if __name__ == "__main__":
     os.chdir('..')
     # get model
     model = HGNN(in_channels, out_channels).to(device)
-    model.eval()
+    model.train()
 
     DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
     TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
@@ -102,4 +108,10 @@ if __name__ == "__main__":
     dataset = GraphDataset(TRAIN_DIR)
     data_iter = DataLoader(dataset, batch_size=batch_size)
     for data in data_iter:
+        out, aux_out, mask_feat_gt = model(data)
+        print("Evaluation Pass")
+
+    model.eval()
+    for data in data_iter:
         out = model(data)
+        print("Evaluation Pass")

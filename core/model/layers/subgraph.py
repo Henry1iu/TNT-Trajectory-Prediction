@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, max_pool
+from torch_geometric.utils import add_self_loops
 
 
 class SubGraph(nn.Module):
@@ -65,6 +66,8 @@ class GraphLayerProp(MessagePassing):
         )
 
     def forward(self, x, edge_index):
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+
         if self.verbose:
             print(f'x before mlp: {x}')
         x = self.mlp(x)
