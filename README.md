@@ -62,9 +62,11 @@ Data-related:
 - [ ] Data Pre-processing
 
 Model-related:
-- [ ] Add the GNN network in the implementation
-- [ ] Add the auxiliary recovery prediction in training
+- [x] Add the GNN network in the implementation
+- [x] Add the auxiliary recovery prediction in training
+- [ ] Create a base class for models
 
 Training-related:
-- [ ] Implement a trainer
-- [ ] Implement the loss function with the auxiliary loss
+- [x] Implement a trainer
+- [x] Implement the loss function with the auxiliary loss
+- [ ] Implement the Gaussian negative log-likelihood loss function (Currently, poisson nll loss)
