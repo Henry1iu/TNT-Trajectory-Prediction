@@ -294,15 +294,19 @@ class VectorNetTrainer(Trainer):
         for i, data in data_iter:
             if training:
                 pred, aux_out, aux_gt = self.model(data.to(self.device))
-                loss = self.criterion(pred, data.y.view(self.batch_size, -1), aux_out, aux_gt)
+                loss = self.criterion(pred,
+                                      data.y.view(-1, self.model.out_channels * self.model.pred_len),
+                                      aux_out,
+                                      aux_gt)
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
                 self.optm_schedule.step_and_update_lr()
             else:
                 with torch.no_grad():
-                    pred = self.model(data)
-                    loss = self.criterion(pred, data.y.view(self.batch_size, -1))
+                    pred = self.model(data.to(self.device))
+                    loss = self.criterion(pred,
+                                          data.y.view(-1, self.model.out_channels * self.model.pred_len))
 
             num_sample += self.batch_size
             avg_loss += loss.item()
