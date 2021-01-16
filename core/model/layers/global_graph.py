@@ -15,15 +15,26 @@ class GlobalGraph(nn.Module):
     """
     Global graph that compute the global information
     """
-    def __init__(self, in_channels, global_graph_width, num_global_layers=1, need_scale=False, with_norm=False):
+    def __init__(self, in_channels,
+                 global_graph_width,
+                 num_global_layers=1,
+                 need_scale=False,
+                 with_norm=False,
+                 device=torch.device("cpu")):
         super(GlobalGraph, self).__init__()
         self.in_channels = in_channels
         self.global_graph_width = global_graph_width
 
+        self.device = device
+
         self.layers = nn.Sequential()
         for i in range(num_global_layers):
             self.layers.add_module(
-                f'glp_{i}', SelfAttentionLayer(self.in_channels, self.global_graph_width, need_scale, with_norm)
+                f'glp_{i}', SelfAttentionLayer(self.in_channels,
+                                               self.global_graph_width,
+                                               need_scale,
+                                               with_norm,
+                                               self.device)
             )
 
     def forward(self, global_data):
@@ -41,10 +52,16 @@ class SelfAttentionLayer(MessagePassing):
     Self-attention layer. no scale_factor d_k
     """
 
-    def __init__(self, in_channels, global_graph_width, need_scale=False, with_norm=False):
+    def __init__(self,
+                 in_channels,
+                 global_graph_width,
+                 need_scale=False,
+                 with_norm=False,
+                 device=torch.device("cpu")):
         super(SelfAttentionLayer, self).__init__(aggr='add')
         self.in_channels = in_channels
         self.with_norm = with_norm
+        self.device = device
 
         self.q_lin = nn.Linear(global_graph_width, global_graph_width)
         self.k_lin = nn.Linear(global_graph_width, global_graph_width)
@@ -55,12 +72,11 @@ class SelfAttentionLayer(MessagePassing):
 
     def forward(self, x, valid_len, time_step_len):
         # cosntruct the fully connected graph(s)
-        edge_index = []
+        edge_index = torch.Tensor([]).to(self.device)
         for graph_id in range(len(valid_len)):
-            for edge in permutations([i for i in range(time_step_len)], 2):
-                if edge[0] < valid_len[graph_id] and edge[1] < valid_len[graph_id]:
-                    edge_index.append([edge[0] + graph_id*time_step_len, edge[1] + graph_id*time_step_len])
-        edge_index = torch.tensor(edge_index).transpose(1, 0)
+            node_list = torch.Tensor([i for i in range(valid_len[graph_id])]).to(self.device) + graph_id*time_step_len
+            edge_index = torch.cat((edge_index, torch.combinations(node_list, 2)), 0)
+        edge_index = edge_index.transpose(1, 0).long()
         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
 
         x = x.view(-1, time_step_len, self.in_channels)

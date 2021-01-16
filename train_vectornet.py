@@ -8,8 +8,10 @@ import numpy as np
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 
-from core.dataloader.dataset import GraphDataset
+from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
+
+TEST = False
 
 
 def train(args):
@@ -23,16 +25,16 @@ def train(args):
     eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
     test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
 
-    t_loader = DataLoader(train_set[:10],
+    t_loader = DataLoader(train_set[:10] if TEST else train_set,
                           batch_size=args.batch_size,
                           num_workers=args.num_workers,
                           pin_memory=True,
                           shuffle=True)
-    e_loader = DataLoader(eval_set[:2],
+    e_loader = DataLoader(eval_set[:2] if TEST else eval_set,
                           batch_size=args.batch_size,
                           num_workers=args.num_workers,
                           pin_memory=True)
-    ts_loader = DataLoader(test_set[:1],
+    ts_loader = DataLoader(test_set[:1] if TEST else test_set,
                            batch_size=1,
                            num_workers=1,
                            pin_memory=True)
@@ -92,16 +94,16 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--num_glayer", type=int, default=1, help="number of global graph layers")
     parser.add_argument("-a", "--aux_loss", type=bool, default=True, help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=2, help="number of batch_size")
-    parser.add_argument("-e", "--n_epoch", type=int, default=10, help="number of epochs")
-    parser.add_argument("-w", "--num_workers", type=int, default=2, help="dataloader worker size")
+    parser.add_argument("-b", "--batch_size", type=int, default=512, help="number of batch_size")
+    parser.add_argument("-e", "--n_epoch", type=int, default=50, help="number of epochs")
+    parser.add_argument("-w", "--num_workers", type=int, default=16, help="dataloader worker size")
 
     parser.add_argument("--with_cuda", type=bool, default=True, help="training with CUDA: true, or false")
     parser.add_argument("--log_freq", type=int, default=2, help="printing loss every n iter: setting n")
     parser.add_argument("--cuda_devices", type=int, nargs='+', default=None, help="CUDA device ids")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate of adam")
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")

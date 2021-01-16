@@ -30,7 +30,8 @@ class VectorNet(nn.Module):
                  subgraph_width=64,
                  global_graph_width=64,
                  traj_pred_mlp_width=64,
-                 with_aux: bool = False):
+                 with_aux: bool = False,
+                 device=torch.device("cpu")):
         super(VectorNet, self).__init__()
         # some params
         self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
@@ -39,13 +40,16 @@ class VectorNet(nn.Module):
         self.subgraph_width = subgraph_width
         self.max_n_guesses = 1
 
+        self.device = device
+
         # subgraph feature extractor
         self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
 
         # global graph
         self.global_graph = GlobalGraph(self.polyline_vec_shape,
                                         global_graph_width,
-                                        num_global_layers=num_global_graph_layer)
+                                        num_global_layers=num_global_graph_layer,
+                                        device=self.device)
 
         # pred mlp
         self.traj_pred_mlp = nn.Sequential(
@@ -78,7 +82,9 @@ class VectorNet(nn.Module):
         x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
 
         # TODO: compute the adjacency matrix???
-        global_graph_data = Data(x=F.normalize(x), valid_lens=valid_lens, time_step_len=time_step_len)
+        global_graph_data = Data(x=F.normalize(x),
+                                 valid_lens=valid_lens,
+                                 time_step_len=time_step_len)
         if self.training:
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features

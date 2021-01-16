@@ -252,7 +252,8 @@ class VectorNetTrainer(Trainer):
         self.model = VectorNet(8,                                   # input 20 time step with 8 features each time step
                                30,                                  # output 30 time step with 2 offset each time step
                                num_global_graph_layer=num_global_graph_layer,
-                               with_aux=aux_loss)
+                               with_aux=aux_loss,
+                               device=self.device)
 
         if not model_path:
             if self.multi_gpu:
@@ -292,7 +293,7 @@ class VectorNetTrainer(Trainer):
 
         for i, data in data_iter:
             if training:
-                pred, aux_out, aux_gt = self.model(data)
+                pred, aux_out, aux_gt = self.model(data.to(self.device))
                 loss = self.criterion(pred, data.y.view(self.batch_size, -1), aux_out, aux_gt)
 
                 self.optm_schedule.zero_grad()
