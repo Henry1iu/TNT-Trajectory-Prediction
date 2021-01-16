@@ -139,7 +139,7 @@ class GraphDataset(InMemoryDataset):
 # %%
 if __name__ == "__main__":
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset/interm_data"
+    INTERMEDIATE_DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset/interm_data"
 
     for folder in ["train", "val", "test"]:
         dataset_input_path = os.path.join(
