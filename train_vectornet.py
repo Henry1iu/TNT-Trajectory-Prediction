@@ -11,7 +11,7 @@ from torch_geometric.data import DataLoader
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
-TEST = False
+TEST = True
 
 
 def train(args):
