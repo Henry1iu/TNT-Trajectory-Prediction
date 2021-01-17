@@ -30,7 +30,7 @@ class Trainer(object):
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_steps=10000,
+                 warmup_epoch=3,
                  with_cuda: bool = True,
                  multi_gpu: bool = False,
                  log_freq: int = 2,
@@ -66,7 +66,7 @@ class Trainer(object):
         self.lr = lr
         self.betas = betas
         self.weight_decay = weight_decay
-        self.warmup_steps = warmup_steps
+        self.warmup_epoch = warmup_epoch
         self.optim = None
         self.optm_schedule = None
 
@@ -109,9 +109,9 @@ class Trainer(object):
             "min_eval_loss": loss
         }, os.path.join(save_folder, "checkpoint_iter{}.ckpt".format(iter_epoch)))
         if self.verbose:
-            print("[Trainer]: Saving checkpoint to {}".format(save_folder))
+            print("[Trainer]: Saving checkpoint to {}...".format(save_folder))
 
-    def save_model(self, save_folder):
+    def save_model(self, save_folder, prefix=""):
         """
         save current state of the model
         :param save_folder: str, the folder to store the model file
@@ -121,13 +121,13 @@ class Trainer(object):
             os.makedirs(save_folder, exist_ok=True)
         torch.save(
             self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
-            os.path.join(save_folder, "{}.pth".format(type(self.model).__name__))
+            os.path.join(save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
         if self.verbose:
             print("[Trainer]: Saving model to {}...".format(save_folder))
 
         # compute the metrics and save
-        _ = self.compute_metric(stored_file=os.path.join(save_folder, "metrics.txt"))
+        _ = self.compute_metric(stored_file=os.path.join(save_folder, "{}_metrics.txt".format(prefix)))
 
     def load(self, load_path, mode='c'):
         """
@@ -206,7 +206,7 @@ class VectorNetTrainer(Trainer):
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_steps=10000,
+                 warmup_epoch=5,
                  aux_loss: bool = False,
                  with_cuda: bool = True,
                  multi_gpu: bool = False,
@@ -239,7 +239,7 @@ class VectorNetTrainer(Trainer):
             lr=lr,
             betas=betas,
             weight_decay=weight_decay,
-            warmup_steps=warmup_steps,
+            warmup_epoch=warmup_epoch,
             with_cuda=with_cuda,
             multi_gpu=multi_gpu,
             log_freq=log_freq,
@@ -264,7 +264,7 @@ class VectorNetTrainer(Trainer):
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
-        self.optm_schedule = ScheduledOptim(self.optim, self.model.subgraph_width, n_warmup_steps=self.warmup_steps)
+        self.optm_schedule = ScheduledOptim(self.optim, self.model.subgraph_width, n_warmup_epoch=self.warmup_epoch)
 
         # loss function
         self.criterion = VectorLoss(aux_loss=aux_loss)

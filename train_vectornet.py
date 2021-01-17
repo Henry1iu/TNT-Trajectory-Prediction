@@ -82,6 +82,8 @@ def train(args):
             trainer.save(output_dir, iter_epoch, min_eval_loss)
             trainer.save_model(output_dir)
 
+    trainer.save_model(output_dir, "final")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -94,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--num_glayer", type=int, default=1, help="number of global graph layers")
     parser.add_argument("-a", "--aux_loss", type=bool, default=True, help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=512, help="number of batch_size")
+    parser.add_argument("-b", "--batch_size", type=int, default=1024, help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50, help="number of epochs")
     parser.add_argument("-w", "--num_workers", type=int, default=16, help="dataloader worker size")
 
@@ -103,7 +105,7 @@ if __name__ == "__main__":
     parser.add_argument("--cuda_devices", type=int, nargs='+', default=None, help="CUDA device ids")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate of adam")
+    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
