@@ -11,7 +11,7 @@ from torch_geometric.data import DataLoader
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
-TEST = True
+TEST = False
 
 
 def train(args):
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--num_glayer", type=int, default=1, help="number of global graph layers")
     parser.add_argument("-a", "--aux_loss", type=bool, default=True, help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=1024, help="number of batch_size")
+    parser.add_argument("-b", "--batch_size", type=int, default=512, help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50, help="number of epochs")
     parser.add_argument("-w", "--num_workers", type=int, default=16, help="dataloader worker size")
 
