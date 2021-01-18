@@ -10,7 +10,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.data import DataLoader, Data
+from torch_geometric.data import DataLoader, DataListLoader, Batch, Data
 
 from core.model.layers.global_graph import GlobalGraph
 from core.model.layers.subgraph import SubGraph
@@ -76,38 +76,70 @@ class VectorNet(nn.Module):
         """
         time_step_len = int(data.time_step_len[0])
         valid_lens = data.valid_len
-        # edge_index = data.edge_index
+
+        # print("valid_lens type:", type(valid_lens).__name__)
+        # print("data batch size:", data.num_batch)
 
         sub_graph_out = self.subgraph(data)
         x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
 
         # TODO: compute the adjacency matrix???
-        global_graph_data = Data(x=F.normalize(x),
+        # reconstruct the batch global interaction graph data
+        if isinstance(data, Batch):
+            # mini-batch case
+            global_g_data = Batch()
+            batch_list = []
+            for idx in range(data.num_graphs):
+                node_list = torch.Tensor([i for i in range(valid_lens[idx])]).long()
+                edge_index = torch.combinations(node_list, 2).transpose(1, 0)
+
+                # print(x[idx, :, :].size())
+                batch_list.append(Data(x=F.normalize(x[idx, :, :], dim=1).squeeze(0),
+                                       edge_index=edge_index,
+                                       valid_lens=valid_lens[idx],
+                                       time_step_len=time_step_len))
+            global_g_data = global_g_data.from_data_list(batch_list)
+        elif isinstance(data, Data):
+            # single batch case
+            node_list = torch.Tensor([i for i in range(valid_lens[0])]).long()
+            edge_index = torch.combinations(node_list, 2).transpose(1, 0)
+            global_g_data = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
+                                 edge_index=edge_index,
                                  valid_lens=valid_lens,
                                  time_step_len=time_step_len)
+        else:
+            raise NotImplementedError
+
         if self.training:
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
-            mask_id = random.randint(0, time_step_len-1)
-            mask_polyline_feat = x[:, mask_id, :]
-            global_graph_data.x[:, mask_id, :] = 0.0
 
-            global_graph_out = self.global_graph(global_graph_data)
-            x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+            global_graph_out, mask_polyline_indices = self.global_graph(global_g_data)
+            global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
-            pred = self.traj_pred_mlp(x[:, [0]].squeeze(1))
+            pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
             if self.with_aux:
-                aux_out = self.aux_mlp(x[:, [0]].squeeze(1))
+                aux_in = torch.empty((global_graph_out.size()[0],
+                                      self.polyline_vec_shape)
+                                     ).to(self.device)
+                aux_gt = torch.empty((global_graph_out.size()[0],
+                                      self.polyline_vec_shape))
+                for i, idx in enumerate(mask_polyline_indices):
+                    aux_in[i] = global_graph_out[i, idx].squeeze(0)
+                    aux_gt[i] = x[i, idx].squeeze(0)
+                aux_out = self.aux_mlp(aux_in)
 
-                return pred, aux_out, mask_polyline_feat
+                return pred, aux_out, aux_gt
             else:
                 return pred, None, None
 
         else:
-            global_graph_out = self.global_graph(global_graph_data)
-            x = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+            # print("x size:", x.size())
 
-            pred = self.traj_pred_mlp(x[:, [0]].squeeze(1))
+            global_graph_out, _ = self.global_graph(global_g_data)
+            global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+
+            pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
 
             return pred
 
@@ -125,16 +157,17 @@ if __name__ == "__main__":
     os.chdir('..')
     # get model
     model = VectorNet(in_channels, pred_len).to(device)
-    model.train()
 
     DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
     TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
 
     dataset = GraphDataset(TRAIN_DIR)
     data_iter = DataLoader(dataset, batch_size=batch_size)
-    for data in data_iter:
-        out, aux_out, mask_feat_gt = model(data)
-        print("Training Pass")
+
+    # model.train()
+    # for data in data_iter:
+    #     out, aux_out, mask_feat_gt = model(data)
+    #     print("Training Pass")
 
     model.eval()
     for data in data_iter:

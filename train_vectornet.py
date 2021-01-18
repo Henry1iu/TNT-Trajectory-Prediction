@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 # from torch.utils.data import DataLoader
-from torch_geometric.data import DataLoader
+from torch_geometric.data import DataLoader, DataListLoader
 
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer

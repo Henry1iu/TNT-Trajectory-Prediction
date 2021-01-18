@@ -90,6 +90,7 @@ class GraphDataset(InMemoryDataset):
             cluster = all_in_features[:, -1].reshape(-1).astype(np.int32)
             valid_len_ls.append(cluster.max())
             y = data['GT'].values[0].reshape(-1).astype(np.float32)
+            print("data['GT'].values[0]:", data['GT'].values[0].shape)
 
             traj_mask, lane_mask = data["TRAJ_ID_TO_MASK"].values[0], data['LANE_ID_TO_MASK'].values[0]
             agent_id = 0
@@ -148,5 +149,6 @@ if __name__ == "__main__":
         dataset = GraphDataset(dataset_input_path).shuffle()
         batch_iter = DataLoader(dataset, batch_size=2, num_workers=2, shuffle=True, pin_memory=True)
         for i, data in tqdm(enumerate(batch_iter)):
-            print("{}".format(i))
-# %%
+            # print("{}".format(i))
+            continue
+# %%s

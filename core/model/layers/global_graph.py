@@ -1,7 +1,7 @@
 # source: https://github.com/xk-huang/yet-another-vectornet
 
 import numpy as np
-from itertools import permutations
+import random
 
 import torch
 import torch.nn as nn
@@ -38,13 +38,26 @@ class GlobalGraph(nn.Module):
             )
 
     def forward(self, global_data):
-        x, valid_len, time_step_len = global_data.x, global_data.valid_lens, global_data.time_step_len
+        x, edge_index = global_data.x, global_data.edge_index
+        valid_lens, time_step_len = global_data.valid_lens, int(global_data.time_step_len[0])
+
+        # print("x size:", x.size())
+        x = x.view(-1, time_step_len, self.in_channels)
+        # randomly mask out node features when training
+        if self.training:
+            batch_size = x.size()[0]
+            aux_mask_tensor_idx = [random.randint(0, time_step_len-1) for _ in range(batch_size)]
+            for i in range(batch_size):
+                x[i, aux_mask_tensor_idx, :] = 0.0
 
         for name, layer in self.layers.named_modules():
             if isinstance(layer, SelfAttentionLayer):
-                x = layer(x, valid_len, time_step_len)
+                x = layer(x, edge_index, valid_lens)
 
-        return x
+        if self.training:
+            return x, aux_mask_tensor_idx
+        else:
+            return x, None
 
 
 class SelfAttentionLayer(MessagePassing):
@@ -70,20 +83,16 @@ class SelfAttentionLayer(MessagePassing):
         self.scale_factor_d = 1 + \
             int(np.sqrt(self.in_channels)) if need_scale else 1
 
-    def forward(self, x, valid_len, time_step_len):
-        # cosntruct the fully connected graph(s)
-        edge_index = torch.Tensor([]).to(self.device)
-        for graph_id in range(len(valid_len)):
-            node_list = torch.Tensor([i for i in range(valid_len[graph_id])]).to(self.device) + graph_id*time_step_len
-            edge_index = torch.cat((edge_index, torch.combinations(node_list, 2)), 0)
-        edge_index = edge_index.transpose(1, 0).long()
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+    def forward(self, x, edge_index, valid_len):
+        # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        # print("x size", x.size())
 
-        x = x.view(-1, time_step_len, self.in_channels)
         # attention
         query = self.q_lin(x)
         key = self.k_lin(x)
         value = self.v_lin(x)
+
+        # print("key size", key.size())
         scores = torch.bmm(query, key.transpose(1, 2))
         attention_weights = self.masked_softmax(scores, valid_len)
         x = torch.bmm(attention_weights, value)
