@@ -1,4 +1,5 @@
 import os
+import sys
 from os.path import join as pjoin
 from datetime import datetime
 
@@ -6,12 +7,13 @@ import argparse
 import numpy as np
 
 # from torch.utils.data import DataLoader
-from torch_geometric.data import DataLoader
+from torch_geometric.data import DataLoader, DataListLoader
 
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
 TEST = False
+sys.path.append("core/dataloader")
 
 
 def train(args):

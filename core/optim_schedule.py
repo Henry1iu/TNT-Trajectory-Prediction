@@ -15,7 +15,7 @@ class ScheduledOptim:
         self.decay_rate = decay_rate
 
     def step_and_update_lr(self):
-        "Step with the inner optimizer"
+        """Step with the inner optimizer"""
         self._update_learning_rate()
         self._optimizer.step()
 
@@ -24,7 +24,7 @@ class ScheduledOptim:
         self._optimizer.zero_grad()
 
     def _get_lr_scale(self):
-        return np.power(self.decay_rate, self.n_current_steps)
+        return np.power(self.decay_rate, max(self.n_current_steps - self.n_warmup_epoch, 0))
 
     def _update_learning_rate(self):
         """ Learning rate scheduling per step """

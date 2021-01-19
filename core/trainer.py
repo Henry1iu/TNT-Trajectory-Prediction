@@ -30,7 +30,7 @@ class Trainer(object):
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=3,
+                 warmup_epoch=5,
                  with_cuda: bool = True,
                  multi_gpu: bool = False,
                  log_freq: int = 2,
@@ -264,7 +264,8 @@ class VectorNetTrainer(Trainer):
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
-        self.optm_schedule = ScheduledOptim(self.optim, self.model.subgraph_width, n_warmup_epoch=self.warmup_epoch)
+        self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
+
 
         # loss function
         self.criterion = VectorLoss(aux_loss=aux_loss)
@@ -287,7 +288,10 @@ class VectorNetTrainer(Trainer):
         num_sample = 0
 
         data_iter = tqdm(enumerate(dataloader),
-                         desc="Ep_{}: {}".format("train" if training else "eval", epoch),
+                         desc="{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
+                                                                               epoch,
+                                                                               0.0,
+                                                                               avg_loss),
                          total=len(dataloader),
                          bar_format="{l_bar}{r_bar}")
 
@@ -301,7 +305,6 @@ class VectorNetTrainer(Trainer):
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
-                self.optm_schedule.step_and_update_lr()
             else:
                 with torch.no_grad():
                     pred = self.model(data.to(self.device))
@@ -311,13 +314,20 @@ class VectorNetTrainer(Trainer):
             num_sample += self.batch_size
             avg_loss += loss.item()
 
-        log = {
-            "epoch": epoch,
-            "avg_loss": avg_loss / num_sample
-        }
+            # print log info
+            # log = {
+            #     "iter": i,
+            #     "loss": loss.item(),
+            #     "avg_loss": avg_loss / num_sample
+            # }
+            # data_iter.write(str(log))
+            desc_str = "{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
+                                                                     epoch,
+                                                                     loss.item(),
+                                                                     avg_loss / num_sample)
+            data_iter.set_description(desc=desc_str, refresh=True)
 
-        if not training and epoch % self.log_freq == 0:
-            data_iter.write(str(log))
+        self.optm_schedule.step_and_update_lr()
 
         return avg_loss / num_sample
 
