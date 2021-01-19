@@ -13,6 +13,7 @@ from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
 TEST = False
+
 sys.path.append("core/dataloader")
 
 

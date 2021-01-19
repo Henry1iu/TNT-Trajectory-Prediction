@@ -13,7 +13,7 @@ from torch.optim import Adam
 from torch_geometric.data import DataLoader
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 
-from core.model.vectornet import VectorNet
+from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
 from core.loss import VectorLoss
 
@@ -249,11 +249,18 @@ class VectorNetTrainer(Trainer):
         # init or load model
         self.aux_loss = aux_loss
         # input dim: (20, 8); output dim: (30, 2)
-        self.model = VectorNet(8,                                   # input 20 time step with 8 features each time step
-                               30,                                  # output 30 time step with 2 offset each time step
-                               num_global_graph_layer=num_global_graph_layer,
-                               with_aux=aux_loss,
-                               device=self.device)
+        # self.model = VectorNet(8,                                   # input 20 time step with 8 features each time step
+        #                        30,                                  # output 30 time step with 2 offset each time step
+        #                        num_global_graph_layer=num_global_graph_layer,
+        #                        with_aux=aux_loss,
+        #                        device=self.device)
+        self.model = OriginalVectorNet(
+            8,
+            30,
+            num_global_graph_layer=num_global_graph_layer,
+            with_aux=aux_loss,
+            device=self.device
+        )
 
         if not model_path:
             if self.multi_gpu:
@@ -265,7 +272,6 @@ class VectorNetTrainer(Trainer):
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
-
 
         # loss function
         self.criterion = VectorLoss(aux_loss=aux_loss)
@@ -300,11 +306,12 @@ class VectorNetTrainer(Trainer):
                 pred, aux_out, aux_gt = self.model(data.to(self.device))
                 loss = self.criterion(pred,
                                       data.y.view(-1, self.model.out_channels * self.model.pred_len),
-                                      aux_out,
-                                      aux_gt)
+                                      aux_out.to(self.device),
+                                      aux_gt.to(self.device))
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
+
             else:
                 with torch.no_grad():
                     pred = self.model(data.to(self.device))
@@ -328,7 +335,6 @@ class VectorNetTrainer(Trainer):
             data_iter.set_description(desc=desc_str, refresh=True)
 
         self.optm_schedule.step_and_update_lr()
-
         return avg_loss / num_sample
 
     # todo: the inference of the model

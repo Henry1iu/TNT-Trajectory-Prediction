@@ -47,8 +47,8 @@ class GlobalGraph(nn.Module):
         if self.training:
             batch_size = x.size()[0]
             aux_mask_tensor_idx = [random.randint(0, time_step_len-1) for _ in range(batch_size)]
-            for i in range(batch_size):
-                x[i, aux_mask_tensor_idx, :] = 0.0
+            for i, mask_id in enumerate(aux_mask_tensor_idx):
+                x[i, mask_id, :] = 0.0
 
         for name, layer in self.layers.named_modules():
             if isinstance(layer, SelfAttentionLayer):
@@ -84,7 +84,7 @@ class SelfAttentionLayer(MessagePassing):
             int(np.sqrt(self.in_channels)) if need_scale else 1
 
     def forward(self, x, edge_index, valid_len):
-        # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         # print("x size", x.size())
 
         # attention
@@ -102,6 +102,52 @@ class SelfAttentionLayer(MessagePassing):
 
     def message(self, x_j):
         return x_j
+
+    def masked_softmax(self, X, valid_len):
+        """
+        masked softmax for attention scores
+        args:
+            X: 3-D tensor, valid_len: 1-D or 2-D tensor
+        """
+        if valid_len is None:
+            return nn.functional.softmax(X, dim=-1)
+        else:
+            shape = X.shape
+            if valid_len.dim() == 1:
+                valid_len = torch.repeat_interleave(
+                    valid_len, repeats=shape[1], dim=0)
+            else:
+                valid_len = valid_len.reshape(-1)
+            # Fill masked elements with a large negative, whose exp is 0
+            X = X.reshape(-1, shape[-1])
+            for count, row in enumerate(X):
+                row[int(valid_len[count]):] = -1e6
+            return nn.functional.softmax(X.reshape(shape), dim=-1)
+
+
+class SelfAttentionFCLayer(nn.Module):
+    """
+    Self-attention layer. no scale_factor d_k
+    """
+
+    def __init__(self, in_channels, global_graph_width, need_scale=False):
+        super(SelfAttentionFCLayer, self).__init__()
+        self.in_channels = in_channels
+        self.q_lin = nn.Linear(in_channels, global_graph_width)
+        self.k_lin = nn.Linear(in_channels, global_graph_width)
+        self.v_lin = nn.Linear(in_channels, global_graph_width)
+        self.scale_factor_d = 1 + \
+            int(np.sqrt(self.in_channels)) if need_scale else 1
+
+    def forward(self, x, valid_len):
+        # print(x.shape)
+        # print(self.q_lin)
+        query = self.q_lin(x)
+        key = self.k_lin(x)
+        value = self.v_lin(x)
+        scores = torch.bmm(query, key.transpose(1, 2))
+        attention_weights = self.masked_softmax(scores, valid_len)
+        return torch.bmm(attention_weights, value)
 
     def masked_softmax(self, X, valid_len):
         """
