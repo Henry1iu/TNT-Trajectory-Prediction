@@ -305,6 +305,7 @@ class VectorNetTrainer(Trainer):
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
+
             else:
                 with torch.no_grad():
                     pred = self.model(data.to(self.device))
@@ -328,7 +329,6 @@ class VectorNetTrainer(Trainer):
             data_iter.set_description(desc=desc_str, refresh=True)
 
         self.optm_schedule.step_and_update_lr()
-
         return avg_loss / num_sample
 
     # todo: the inference of the model
