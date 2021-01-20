@@ -1,13 +1,17 @@
 # %%
 
 import os
+from typing import List, Dict, Any
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
-
-import torch
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data import Data, DataLoader
+import torch
+from utils.feature_utils import compute_feature_for_one_seq, encoding_features, save_features
+from utils.config import DATA_DIR, LANE_RADIUS, OBJ_RADIUS, OBS_LEN, INTERMEDIATE_DATA_DIR
+from tqdm import tqdm
 
 
 # %%
@@ -20,13 +24,10 @@ def get_fc_edge_index(num_nodes, start=0):
     for i in range(num_nodes):
         from_ = np.ones(num_nodes, dtype=np.int64) * i
         # FIX BUG: no self loop in ful connected nodes graphs
-        edge_index = np.hstack(
-            (edge_index, np.vstack((np.hstack([from_[:i], from_[i + 1:]]), np.hstack([to_[:i], to_[i + 1:]])))))
+        edge_index = np.hstack((edge_index, np.vstack((np.hstack([from_[:i], from_[i+1:]]), np.hstack([to_[:i], to_[i+1:]])))))
     edge_index = edge_index + start
 
     return edge_index.astype(np.int64), num_nodes + start
-
-
 # %%
 
 
@@ -43,13 +44,12 @@ class GraphData(Data):
         else:
             return 0
 
-
 # %%
 
 
 class GraphDataset(InMemoryDataset):
     """
-    dataset object similar to `torchvision`
+    dataset object similar to `torchvision` 
     """
 
     def __init__(self, root, transform=None, pre_transform=None):
@@ -71,10 +71,11 @@ class GraphDataset(InMemoryDataset):
 
         def get_data_path_ls(dir_):
             return [os.path.join(dir_, data_path) for data_path in os.listdir(dir_)]
-
+        
         # make sure deterministic results
         data_path_ls = sorted(get_data_path_ls(self.root))
 
+        valid_len_ls = []
         valid_len_ls = []
         data_ls = []
         for data_p in tqdm(data_path_ls):
@@ -95,7 +96,7 @@ class GraphDataset(InMemoryDataset):
             agent_id = 0
             edge_index_start = 0
             assert all_in_features[agent_id][
-                       -1] == 0, f"agent id is wrong. id {agent_id}: type {all_in_features[agent_id][4]}"
+                -1] == 0, f"agent id is wrong. id {agent_id}: type {all_in_features[agent_id][4]}"
 
             for id_, mask_ in traj_mask.items():
                 data_ = all_in_features[mask_[0]:mask_[1]]
@@ -105,7 +106,7 @@ class GraphDataset(InMemoryDataset):
                 edge_index_ls.append(edge_index_)
 
             for id_, mask_ in lane_mask.items():
-                data_ = all_in_features[mask_[0] + add_len: mask_[1] + add_len]
+                data_ = all_in_features[mask_[0]+add_len: mask_[1]+add_len]
                 edge_index_, edge_index_start = get_fc_edge_index(
                     data_.shape[0], edge_index_start)
                 x_ls.append(data_)
@@ -122,7 +123,7 @@ class GraphDataset(InMemoryDataset):
             tup[0] = np.vstack(
                 [tup[0], np.zeros((padd_to_index - tup[-2].max(), feature_len), dtype=tup[0].dtype)])
             tup[-2] = np.hstack(
-                [tup[2], np.arange(tup[-2].max() + 1, padd_to_index + 1)])
+                [tup[2], np.arange(tup[-2].max()+1, padd_to_index+1)])
             g_data = GraphData(
                 x=torch.from_numpy(tup[0]),
                 y=torch.from_numpy(tup[1]),
@@ -138,15 +139,13 @@ class GraphDataset(InMemoryDataset):
 
 # %%
 if __name__ == "__main__":
-    # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet/data/interm_data"
-
-    for folder in ["train", "val", "test"]:
+    #for folder in ["train", "val", "test"]:
+    for folder in ["mao", "xin", "yu"]:
         dataset_input_path = os.path.join(
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
-
         dataset = GraphDataset(dataset_input_path)
-        batch_iter = DataLoader(dataset, batch_size=2)
+        batch_iter = DataLoader(dataset, batch_size=256)
         batch = next(iter(batch_iter))
+
 
 # %%
