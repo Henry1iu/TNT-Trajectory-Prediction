@@ -90,7 +90,7 @@ class VectorNet(nn.Module):
             global_g_data = Batch()
             batch_list = []
             for idx in range(data.num_graphs):
-                node_list = torch.Tensor([i for i in range(valid_lens[idx])]).long()
+                node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
                 edge_index = torch.combinations(node_list, 2).transpose(1, 0)
 
                 # print(x[idx, :, :].size())
@@ -101,9 +101,9 @@ class VectorNet(nn.Module):
             global_g_data = global_g_data.from_data_list(batch_list)
         elif isinstance(data, Data):
             # single batch case
-            node_list = torch.Tensor([i for i in range(valid_lens[0])]).long()
+            node_list = torch.tensor([i for i in range(valid_lens[0])]).long()
             edge_index = torch.combinations(node_list, 2).transpose(1, 0)
-            c = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
+            global_g_data = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
                                  edge_index=edge_index,
                                  valid_lens=valid_lens,
                                  time_step_len=time_step_len)
@@ -120,11 +120,14 @@ class VectorNet(nn.Module):
 
             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
             if self.with_aux:
-                aux_in = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape)
-                                     ).to(self.device)
-                aux_gt = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape)).to(self.device)
+                aux_in = torch.empty(
+                    (global_graph_out.size()[0], self.polyline_vec_shape),
+                    device=self.device
+                )
+                aux_gt = torch.empty(
+                    (global_graph_out.size()[0], self.polyline_vec_shape),
+                    device=self.device
+                )
                 for i, idx in enumerate(mask_polyline_indices):
                     aux_in[i] = global_graph_out[i, idx].squeeze(0)
                     aux_gt[i] = x[i, idx].squeeze(0)
@@ -225,7 +228,8 @@ class OriginalVectorNet(nn.Module):
                                       self.polyline_vec_shape)
                                      ).to(self.device)
                 aux_gt = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape))
+                                      self.polyline_vec_shape)
+                                     ).to(self.device)
                 for i, idx in enumerate(mask_polyline_indices):
                     aux_in[i] = global_graph_out[i, idx].squeeze(0)
                     aux_gt[i] = x[i, idx].squeeze(0)

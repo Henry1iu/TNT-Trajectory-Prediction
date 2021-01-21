@@ -50,7 +50,7 @@ class Trainer(object):
         :param verbose: whether printing debug messages
         """
         # cuda
-        self.device = torch.device("cuda" if torch.cuda.is_available() and with_cuda else "cpu")
+        self.device = torch.device("cuda:1" if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
         self.trainset = train_loader
@@ -249,12 +249,9 @@ class VectorNetTrainer(Trainer):
         # init or load model
         self.aux_loss = aux_loss
         # input dim: (20, 8); output dim: (30, 2)
-        # self.model = VectorNet(8,                                   # input 20 time step with 8 features each time step
-        #                        30,                                  # output 30 time step with 2 offset each time step
-        #                        num_global_graph_layer=num_global_graph_layer,
-        #                        with_aux=aux_loss,
-        #                        device=self.device)
-        self.model = OriginalVectorNet(
+        model_name = VectorNet
+        # model_name = OriginalVectorNet
+        self.model = model_name(
             8,
             30,
             num_global_graph_layer=num_global_graph_layer,
@@ -265,6 +262,10 @@ class VectorNetTrainer(Trainer):
         if not model_path:
             if self.multi_gpu:
                 self.model = nn.DataParallel(self.model)
+                if self.verbose:
+                    print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
+            else:
+                print("[VectorNetTrainer]: Train the mode with single GPU.")
             self.model.to(self.device)
         else:
             self.load(model_path, 'm')
@@ -306,8 +307,8 @@ class VectorNetTrainer(Trainer):
                 pred, aux_out, aux_gt = self.model(data.to(self.device))
                 loss = self.criterion(pred,
                                       data.y.view(-1, self.model.out_channels * self.model.pred_len),
-                                      aux_out.to(self.device),
-                                      aux_gt.to(self.device))
+                                      aux_out,
+                                      aux_gt)
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
