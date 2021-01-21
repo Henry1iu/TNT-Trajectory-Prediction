@@ -1,4 +1,5 @@
 import os
+import sys
 from os.path import join as pjoin
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
 TEST = True
+sys.path.append("core/dataloader")
 
 
 def train(args):

@@ -90,7 +90,7 @@ class VectorNet(nn.Module):
             global_g_data = Batch()
             batch_list = []
             for idx in range(data.num_graphs):
-                node_list = torch.Tensor([i for i in range(valid_lens[idx])]).long()
+                node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
                 edge_index = torch.combinations(node_list, 2).transpose(1, 0)
 
                 # print(x[idx, :, :].size())
@@ -101,7 +101,7 @@ class VectorNet(nn.Module):
             global_g_data = global_g_data.from_data_list(batch_list)
         elif isinstance(data, Data):
             # single batch case
-            node_list = torch.Tensor([i for i in range(valid_lens[0])]).long()
+            node_list = torch.tensor([i for i in range(valid_lens[0])]).long()
             edge_index = torch.combinations(node_list, 2).transpose(1, 0)
             global_g_data = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
                                  edge_index=edge_index,
