@@ -7,7 +7,7 @@ class ScheduledOptim:
     """ A simple wrapper class for learning rate scheduling
     """
 
-    def __init__(self, optimizer, init_lr, n_warmup_epoch=15, decay_rate=0.95):
+    def __init__(self, optimizer, init_lr, n_warmup_epoch=15, decay_rate=0.9):
         self._optimizer = optimizer
         self.n_warmup_epoch = n_warmup_epoch
         self.n_current_steps = 0

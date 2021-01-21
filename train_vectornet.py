@@ -12,7 +12,7 @@ from torch_geometric.data import DataLoader, DataListLoader
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.trainer import VectorNetTrainer
 
-TEST = True
+TEST = False
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 sys.path.append("core/dataloader")
@@ -29,12 +29,12 @@ def train(args):
     eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
     test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
 
-    if len(args.cuda_devices) > 1:
+    # if len(args.cuda_device) > 1:
          # using multiple gpus
-        loader = DataListLoader
-    else:
-        loader = DataLoader
-
+    #     loader = DataListLoader
+    # else:
+    #     loader = DataLoader
+    loader = DataLoader
     t_loader = loader(train_set[:10] if TEST else train_set,
                       batch_size=args.batch_size,
                       num_workers=args.num_workers,
@@ -69,7 +69,7 @@ def train(args):
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
-        multi_gpu=True if len(args.cuda_devices) > 1 else False,
+        cuda_device=args.cuda_device[0],
         log_freq=args.log_freq
     )
 
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--with_cuda", type=bool, default=True, help="training with CUDA: true, or false")
     parser.add_argument("--log_freq", type=int, default=2, help="printing loss every n iter: setting n")
-    parser.add_argument("--cuda_devices", type=int, nargs='+', default=[], help="CUDA device ids")
+    parser.add_argument("--cuda_device", type=int, nargs='+', default=[], help="CUDA device ids")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")

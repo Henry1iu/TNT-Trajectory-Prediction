@@ -32,7 +32,7 @@ class Trainer(object):
                  weight_decay: float = 0.01,
                  warmup_epoch=5,
                  with_cuda: bool = True,
-                 multi_gpu: bool = False,
+                 cuda_device: int = 0,
                  log_freq: int = 2,
                  verbose: bool = True
                  ):
@@ -50,7 +50,7 @@ class Trainer(object):
         :param verbose: whether printing debug messages
         """
         # cuda
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() and with_cuda else "cpu")
+        self.device = torch.device("cuda:{}".format(cuda_device) if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
         self.trainset = train_loader
@@ -60,7 +60,7 @@ class Trainer(object):
 
         # model
         self.model = None
-        self.multi_gpu = multi_gpu
+        self.multi_gpu = False
 
         # optimizer params
         self.lr = lr
@@ -209,7 +209,7 @@ class VectorNetTrainer(Trainer):
                  warmup_epoch=5,
                  aux_loss: bool = False,
                  with_cuda: bool = True,
-                 multi_gpu: bool = False,
+                 cuda_device: int = 0,
                  log_freq: int = 2,
                  model_path: str = None,
                  ckpt_path: str = None,
@@ -241,7 +241,7 @@ class VectorNetTrainer(Trainer):
             weight_decay=weight_decay,
             warmup_epoch=warmup_epoch,
             with_cuda=with_cuda,
-            multi_gpu=multi_gpu,
+            cuda_device=cuda_device,
             log_freq=log_freq,
             verbose=verbose
         )
@@ -260,12 +260,13 @@ class VectorNetTrainer(Trainer):
         )
 
         if not model_path:
-            if self.multi_gpu:
-                self.model = nn.DataParallel(self.model)
-                if self.verbose:
-                    print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
-            else:
-                print("[VectorNetTrainer]: Train the mode with single GPU.")
+            # if self.multi_gpu:
+            #     self.model = nn.DataParallel(self.model)
+            #     if self.verbose:
+            #         print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
+            # else:
+            #     print("[VectorNetTrainer]: Train the mode with single device on {}.".format(self.device))
+            print("[VectorNetTrainer]: Train the mode with single device on {}.".format(self.device))
             self.model.to(self.device)
         else:
             self.load(model_path, 'm')
