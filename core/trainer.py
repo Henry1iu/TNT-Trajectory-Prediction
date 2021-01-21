@@ -13,7 +13,7 @@ from torch.optim import Adam
 from torch_geometric.data import DataLoader
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 
-from core.model.vectornet import VectorNet
+from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
 from core.loss import VectorLoss
 
@@ -50,7 +50,7 @@ class Trainer(object):
         :param verbose: whether printing debug messages
         """
         # cuda
-        self.device = torch.device("cuda" if torch.cuda.is_available() and with_cuda else "cpu")
+        self.device = torch.device("cuda:1" if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
         self.trainset = train_loader
@@ -249,15 +249,23 @@ class VectorNetTrainer(Trainer):
         # init or load model
         self.aux_loss = aux_loss
         # input dim: (20, 8); output dim: (30, 2)
-        self.model = VectorNet(8,                                   # input 20 time step with 8 features each time step
-                               30,                                  # output 30 time step with 2 offset each time step
-                               num_global_graph_layer=num_global_graph_layer,
-                               with_aux=aux_loss,
-                               device=self.device)
+        model_name = VectorNet
+        # model_name = OriginalVectorNet
+        self.model = model_name(
+            8,
+            30,
+            num_global_graph_layer=num_global_graph_layer,
+            with_aux=aux_loss,
+            device=self.device
+        )
 
         if not model_path:
             if self.multi_gpu:
                 self.model = nn.DataParallel(self.model)
+                if self.verbose:
+                    print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
+            else:
+                print("[VectorNetTrainer]: Train the mode with single GPU.")
             self.model.to(self.device)
         else:
             self.load(model_path, 'm')
@@ -265,7 +273,6 @@ class VectorNetTrainer(Trainer):
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
-
 
         # loss function
         self.criterion = VectorLoss(aux_loss=aux_loss)
@@ -305,6 +312,7 @@ class VectorNetTrainer(Trainer):
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
+                self.optim.step()
 
             else:
                 with torch.no_grad():

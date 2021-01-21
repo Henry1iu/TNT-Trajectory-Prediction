@@ -110,6 +110,7 @@ class VectorNet(nn.Module):
         else:
             raise NotImplementedError
 
+        global_g_data.to(self.device)
         if self.training:
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
@@ -119,11 +120,14 @@ class VectorNet(nn.Module):
 
             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
             if self.with_aux:
-                aux_in = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape)
-                                     ).to(self.device)
-                aux_gt = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape))
+                aux_in = torch.empty(
+                    (global_graph_out.size()[0], self.polyline_vec_shape),
+                    device=self.device
+                )
+                aux_gt = torch.empty(
+                    (global_graph_out.size()[0], self.polyline_vec_shape),
+                    device=self.device
+                )
                 for i, idx in enumerate(mask_polyline_indices):
                     aux_in[i] = global_graph_out[i, idx].squeeze(0)
                     aux_gt[i] = x[i, idx].squeeze(0)
@@ -224,7 +228,8 @@ class OriginalVectorNet(nn.Module):
                                       self.polyline_vec_shape)
                                      ).to(self.device)
                 aux_gt = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape))
+                                      self.polyline_vec_shape)
+                                     ).to(self.device)
                 for i, idx in enumerate(mask_polyline_indices):
                     aux_in[i] = global_graph_out[i, idx].squeeze(0)
                     aux_gt[i] = x[i, idx].squeeze(0)
