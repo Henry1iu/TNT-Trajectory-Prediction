@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 # from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 
@@ -34,6 +35,7 @@ class Trainer(object):
                  with_cuda: bool = True,
                  cuda_device: int = 0,
                  log_freq: int = 2,
+                 save_folder: str = "",
                  verbose: bool = True
                  ):
         """
@@ -60,7 +62,7 @@ class Trainer(object):
 
         # model
         self.model = None
-        # self.multi_gpu = multi_gpu
+        self.multi_gpu = False
 
         # optimizer params
         self.lr = lr
@@ -75,6 +77,8 @@ class Trainer(object):
         self.min_eval_loss = None
 
         # log
+        self.save_folder = save_folder
+        self.logger = SummaryWriter(log_dir=os.path.join(self.save_folder, "log"))
         self.log_freq = log_freq
         self.verbose = verbose
 
@@ -90,8 +94,11 @@ class Trainer(object):
     def iteration(self, epoch, dataloader):
         raise NotImplementedError
 
+    def write_log(self, name_str, data, epoch):
+        self.logger.add_scalar(name_str, data, epoch)
+
     # todo: save the model and current training status
-    def save(self, save_folder, iter_epoch, loss):
+    def save(self, iter_epoch, loss):
         """
         save current state of the training and update the minimum loss value
         :param save_folder: str, the destination folder to store the ckpt
@@ -100,34 +107,34 @@ class Trainer(object):
         :return:
         """
         self.min_eval_loss = loss
-        if not os.path.exists(save_folder):
-            os.makedirs(save_folder, exist_ok=True)
+        if not os.path.exists(self.save_folder):
+            os.makedirs(self.save_folder, exist_ok=True)
         torch.save({
             "epoch": iter_epoch,
             "model_state_dict": self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
             "optimizer_state_dict": self.optim.state_dict(),
             "min_eval_loss": loss
-        }, os.path.join(save_folder, "checkpoint_iter{}.ckpt".format(iter_epoch)))
+        }, os.path.join(self.save_folder, "checkpoint_iter{}.ckpt".format(iter_epoch)))
         if self.verbose:
-            print("[Trainer]: Saving checkpoint to {}...".format(save_folder))
+            print("[Trainer]: Saving checkpoint to {}...".format(self.save_folder))
 
-    def save_model(self, save_folder, prefix=""):
+    def save_model(self, prefix=""):
         """
         save current state of the model
         :param save_folder: str, the folder to store the model file
         :return:
         """
-        if not os.path.exists(save_folder):
-            os.makedirs(save_folder, exist_ok=True)
+        if not os.path.exists(self.save_folder):
+            os.makedirs(self.save_folder, exist_ok=True)
         torch.save(
             self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
-            os.path.join(save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
+            os.path.join(self.save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
         if self.verbose:
-            print("[Trainer]: Saving model to {}...".format(save_folder))
+            print("[Trainer]: Saving model to {}...".format(self.save_folder))
 
         # compute the metrics and save
-        _ = self.compute_metric(stored_file=os.path.join(save_folder, "{}_metrics.txt".format(prefix)))
+        _ = self.compute_metric(stored_file=os.path.join(self.save_folder, "{}_metrics.txt".format(prefix)))
 
     def load(self, load_path, mode='c'):
         """
@@ -211,6 +218,7 @@ class VectorNetTrainer(Trainer):
                  with_cuda: bool = True,
                  cuda_device: int = 0,
                  log_freq: int = 2,
+                 save_folder: str = "",
                  model_path: str = None,
                  ckpt_path: str = None,
                  verbose: bool = True
@@ -243,6 +251,7 @@ class VectorNetTrainer(Trainer):
             with_cuda=with_cuda,
             cuda_device=cuda_device,
             log_freq=log_freq,
+            save_folder=save_folder,
             verbose=verbose
         )
 
@@ -313,12 +322,14 @@ class VectorNetTrainer(Trainer):
                 self.optm_schedule.zero_grad()
                 loss.backward()
                 self.optim.step()
+                self.write_log("Train Loss", loss.item(), epoch)
 
             else:
                 with torch.no_grad():
                     pred = self.model(data.to(self.device))
                     loss = self.criterion(pred,
                                           data.y.view(-1, self.model.out_channels * self.model.pred_len))
+                    self.write_log("Eval Loss", loss.item(), epoch)
 
             num_sample += self.batch_size
             avg_loss += loss.item()
