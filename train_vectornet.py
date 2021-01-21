@@ -10,10 +10,9 @@ import numpy as np
 from torch_geometric.data import DataLoader, DataListLoader
 
 from core.dataloader.dataset import GraphDataset, GraphData
-from core.trainer import VectorNetTrainer
+from core.vectornet_trainer import VectorNetTrainer
 
-TEST = False
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+TEST = True
 
 sys.path.append("core/dataloader")
 
@@ -29,11 +28,6 @@ def train(args):
     eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
     test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
 
-    # if len(args.cuda_device) > 1:
-         # using multiple gpus
-    #     loader = DataListLoader
-    # else:
-    #     loader = DataLoader
     loader = DataLoader
     t_loader = loader(train_set[:10] if TEST else train_set,
                       batch_size=args.batch_size,
@@ -69,7 +63,8 @@ def train(args):
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
-        cuda_device=args.cuda_device[0],
+        cuda_device=args.cuda_device,
+        save_folder=output_dir,
         log_freq=args.log_freq
     )
 
@@ -90,10 +85,10 @@ def train(args):
         elif eval_loss < min_eval_loss:
             # save the model when a lower eval_loss is found
             min_eval_loss = eval_loss
-            trainer.save(output_dir, iter_epoch, min_eval_loss)
-            trainer.save_model(output_dir)
+            trainer.save(iter_epoch, min_eval_loss)
+            trainer.save_model()
 
-    trainer.save_model(output_dir, "final")
+    trainer.save_model("final")
 
 
 if __name__ == "__main__":
@@ -104,16 +99,26 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/vectornet/",
                         help="ex)dir to save checkpoint and model")
 
-    parser.add_argument("-l", "--num_glayer", type=int, default=1, help="number of global graph layers")
-    parser.add_argument("-a", "--aux_loss", type=bool, default=False, help="Training with the auxiliary recovery loss")
+    parser.add_argument("-l", "--num_glayer", type=int, default=1,
+                        help="number of global graph layers")
+    parser.add_argument("-a", "--aux_loss", action="store_true", default=False,
+                        help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=512, help="number of batch_size")
-    parser.add_argument("-e", "--n_epoch", type=int, default=50, help="number of epochs")
-    parser.add_argument("-w", "--num_workers", type=int, default=8, help="dataloader worker size")
+    parser.add_argument("-b", "--batch_size", type=int, default=256,
+                        help="number of batch_size")
+    parser.add_argument("-e", "--n_epoch", type=int, default=50,
+                        help="number of epochs")
+    parser.add_argument("-w", "--num_workers", type=int, default=8,
+                        help="dataloader worker size")
 
-    parser.add_argument("--with_cuda", type=bool, default=True, help="training with CUDA: true, or false")
-    parser.add_argument("--log_freq", type=int, default=2, help="printing loss every n iter: setting n")
-    parser.add_argument("--cuda_device", type=int, nargs='+', default=[], help="CUDA device ids")
+    parser.add_argument("-c", "--with_cuda", type=bool, default=False,
+                        help="training with CUDA: true, or false")
+    parser.add_argument("-cd", "--cuda_device", type=int, default=None,
+                        help="CUDA device ids")
+    # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
+    #                     help="CUDA device ids")
+    parser.add_argument("--log_freq", type=int, default=2,
+                        help="printing loss every n iter: setting n")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")

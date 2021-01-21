@@ -43,21 +43,11 @@ class GlobalGraph(nn.Module):
 
         # print("x size:", x.size())
         x = x.view(-1, time_step_len, self.in_channels)
-        # randomly mask out node features when training
-        if self.training:
-            batch_size = x.size()[0]
-            aux_mask_tensor_idx = [random.randint(0, time_step_len-1) for _ in range(batch_size)]
-            for i, mask_id in enumerate(aux_mask_tensor_idx):
-                x[i, mask_id, :] = 0.0
-
         for name, layer in self.layers.named_modules():
             if isinstance(layer, SelfAttentionLayer):
                 x = layer(x, edge_index, valid_lens)
 
-        if self.training:
-            return x, aux_mask_tensor_idx
-        else:
-            return x, None
+        return x
 
 
 class SelfAttentionLayer(MessagePassing):

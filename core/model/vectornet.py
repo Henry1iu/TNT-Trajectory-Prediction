@@ -38,6 +38,7 @@ class VectorNet(nn.Module):
         self.out_channels = 2
         self.pred_len = pred_len
         self.subgraph_width = subgraph_width
+        self.global_graph_width = global_graph_width
         self.max_n_guesses = 1
 
         self.device = device
@@ -81,7 +82,15 @@ class VectorNet(nn.Module):
         # print("data batch size:", data.num_batch)
 
         sub_graph_out = self.subgraph(data)
-        x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
+        x = sub_graph_out.x.view(-1, time_step_len, self.subgraph_width)
+
+        if self.training and self.with_aux:
+            mask_polyline_indices = [random.randint(0, time_step_len - 1) + i * time_step_len for i in
+                                     range(x.size()[0])]
+            x = x.view(-1, self.subgraph_width)
+            aux_gt = x[mask_polyline_indices]
+            x[mask_polyline_indices] = 0.0
+            x = x.view(-1, time_step_len, self.subgraph_width)
 
         # TODO: compute the adjacency matrix???
         # reconstruct the batch global interaction graph data
@@ -115,24 +124,13 @@ class VectorNet(nn.Module):
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
 
-            global_graph_out, mask_polyline_indices = self.global_graph(global_g_data)
+            global_graph_out = self.global_graph(global_g_data)
             global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
             if self.with_aux:
-                aux_in = torch.empty(
-                    (global_graph_out.size()[0], self.polyline_vec_shape),
-                    device=self.device
-                )
-                aux_gt = torch.empty(
-                    (global_graph_out.size()[0], self.polyline_vec_shape),
-                    device=self.device
-                )
-                for i, idx in enumerate(mask_polyline_indices):
-                    aux_in[i] = global_graph_out[i, idx].squeeze(0)
-                    aux_gt[i] = x[i, idx].squeeze(0)
+                aux_in = global_graph_out.view(-1, self.global_graph_width)[mask_polyline_indices]
                 aux_out = self.aux_mlp(aux_in)
-
                 return pred, aux_out, aux_gt
             else:
                 return pred, None, None
@@ -140,7 +138,7 @@ class VectorNet(nn.Module):
         else:
             # print("x size:", x.size())
 
-            global_graph_out, _ = self.global_graph(global_g_data)
+            global_graph_out = self.global_graph(global_g_data)
             global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
@@ -169,6 +167,7 @@ class OriginalVectorNet(nn.Module):
         self.out_channels = 2
         self.pred_len = pred_len
         self.subgraph_width = subgraph_width
+        self.global_graph_width = global_graph_width
         self.max_n_guesses = 1
 
         self.device = device
@@ -216,27 +215,23 @@ class OriginalVectorNet(nn.Module):
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
             if self.with_aux:
-                mask_polyline_indices = [random.randint(0, time_step_len-1) for _ in range(x.size()[0])]
-                for i, idx in enumerate(mask_polyline_indices):
-                    x[i, idx, :] = 0.0
+                mask_polyline_indices = [random.randint(0, time_step_len-1) + i * time_step_len for i in range(x.size()[0])]
+                x = x.view(-1, self.subgraph_width)
+                aux_gt = x[mask_polyline_indices]
+                x[mask_polyline_indices] = 0.0
 
-            global_graph_out = self.global_graph(x, valid_lens)
-            pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
+                x = x.view(-1, time_step_len, self.subgraph_width)
+                global_graph_out = self.global_graph(x, valid_lens)
+                pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
 
-            if self.with_aux:
-                aux_in = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape)
-                                     ).to(self.device)
-                aux_gt = torch.empty((global_graph_out.size()[0],
-                                      self.polyline_vec_shape)
-                                     ).to(self.device)
-                for i, idx in enumerate(mask_polyline_indices):
-                    aux_in[i] = global_graph_out[i, idx].squeeze(0)
-                    aux_gt[i] = x[i, idx].squeeze(0)
+                aux_in = global_graph_out.view(-1, self.global_graph_width)[mask_polyline_indices]
                 aux_out = self.aux_mlp(aux_in)
 
                 return pred, aux_out, aux_gt
             else:
+                global_graph_out = self.global_graph(x, valid_lens)
+                pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
+
                 return pred, None, None
 
         else:
@@ -261,8 +256,8 @@ if __name__ == "__main__":
     show_every = 10
     os.chdir('..')
     # get model
-    # model = VectorNet(in_channels, pred_len, with_aux=True).to(device)
-    model = OriginalVectorNet(in_channels, pred_len, with_aux=True).to(device)
+    model = VectorNet(in_channels, pred_len, with_aux=True).to(device)
+    # model = OriginalVectorNet(in_channels, pred_len, with_aux=True).to(device)
 
     DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
     TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
