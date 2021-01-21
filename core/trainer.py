@@ -341,10 +341,10 @@ class VectorNetTrainer(Trainer):
             #     "avg_loss": avg_loss / num_sample
             # }
             # data_iter.write(str(log))
-            desc_str = "{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
-                                                                     epoch,
-                                                                     loss.item(),
-                                                                     avg_loss / num_sample)
+            desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
+                                                                                 epoch,
+                                                                                 loss.item(),
+                                                                                 avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
         self.optm_schedule.step_and_update_lr()
