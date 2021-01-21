@@ -12,7 +12,7 @@ from torch_geometric.data import DataLoader, DataListLoader
 from core.dataloader.dataset import GraphDataset, GraphData
 from core.vectornet_trainer import VectorNetTrainer
 
-TEST = True
+TEST = False
 
 sys.path.append("core/dataloader")
 
@@ -108,10 +108,10 @@ if __name__ == "__main__":
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
-    parser.add_argument("-w", "--num_workers", type=int, default=8,
+    parser.add_argument("-w", "--num_workers", type=int, default=16,
                         help="dataloader worker size")
 
-    parser.add_argument("-c", "--with_cuda", type=bool, default=False,
+    parser.add_argument("-c", "--with_cuda", action="store_true", default=False,
                         help="training with CUDA: true, or false")
     parser.add_argument("-cd", "--cuda_device", type=int, default=None,
                         help="CUDA device ids")
