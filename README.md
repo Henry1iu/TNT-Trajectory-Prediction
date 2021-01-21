@@ -53,6 +53,7 @@ If you find there is conflict, ask me for help.
 * python==3.6
 * pytorch==1.4.0
 * torch-geometric==1.5.0
+* tensorboard
 * argoverse-api
 * pandas==1.0.0
 
