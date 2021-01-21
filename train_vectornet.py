@@ -69,7 +69,7 @@ def train(args):
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
-        multi_gpu=True if len(args.cuda_devices) > 1 else False,
+        cuda_device=args.cuda_device[0],
         log_freq=args.log_freq
     )
 
@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--with_cuda", type=bool, default=True, help="training with CUDA: true, or false")
     parser.add_argument("--log_freq", type=int, default=2, help="printing loss every n iter: setting n")
-    parser.add_argument("--cuda_devices", type=int, nargs='+', default=[], help="CUDA device ids")
+    parser.add_argument("--cuda_device", type=int, nargs='+', default=[], help="CUDA device ids")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
