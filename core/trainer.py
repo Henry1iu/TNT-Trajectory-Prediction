@@ -50,7 +50,7 @@ class Trainer(object):
         :param verbose: whether printing debug messages
         """
         # cuda
-        self.device = torch.device("cuda:1" if torch.cuda.is_available() and with_cuda else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
         self.trainset = train_loader
