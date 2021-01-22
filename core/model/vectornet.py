@@ -85,8 +85,8 @@ class VectorNet(nn.Module):
         x = sub_graph_out.x.view(-1, time_step_len, self.subgraph_width)
 
         if self.training and self.with_aux:
-            mask_polyline_indices = [random.randint(0, time_step_len - 1) + i * time_step_len for i in
-                                     range(x.size()[0])]
+            batch_size = x.size()[0]
+            mask_polyline_indices = [random.randint(0, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
             x = x.view(-1, self.subgraph_width)
             aux_gt = x[mask_polyline_indices]
             x[mask_polyline_indices] = 0.0
@@ -102,7 +102,6 @@ class VectorNet(nn.Module):
                 node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
                 edge_index = torch.combinations(node_list, 2).transpose(1, 0)
 
-                # print(x[idx, :, :].size())
                 batch_list.append(Data(x=F.normalize(x[idx, :, :], dim=1).squeeze(0),
                                        edge_index=edge_index,
                                        valid_lens=valid_lens[idx],
@@ -131,13 +130,12 @@ class VectorNet(nn.Module):
             if self.with_aux:
                 aux_in = global_graph_out.view(-1, self.global_graph_width)[mask_polyline_indices]
                 aux_out = self.aux_mlp(aux_in)
+
                 return pred, aux_out, aux_gt
             else:
                 return pred, None, None
 
         else:
-            # print("x size:", x.size())
-
             global_graph_out = self.global_graph(global_g_data)
             global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
 
@@ -235,8 +233,6 @@ class OriginalVectorNet(nn.Module):
                 return pred, None, None
 
         else:
-            # print("x size:", x.size())
-
             global_graph_out = self.global_graph(x, valid_lens)
 
             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
