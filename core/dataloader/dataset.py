@@ -43,7 +43,6 @@ class GraphData(Data):
         else:
             return 0
 
-
 # %%
 
 

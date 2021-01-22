@@ -21,7 +21,7 @@ class VectorNetTrainer(Trainer):
                  test_laoder: DataLoader = None,
                  batch_size: int = 1,
                  num_global_graph_layer=1,
-                 lr: float = 1e-4,
+                 lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
                  warmup_epoch=5,
