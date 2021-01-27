@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any
 import os
-from utils.config import LANE_WIDTH
+from core.util.config import LANE_WIDTH
 
 
 def get_halluc_lane(centerlane, city_name):

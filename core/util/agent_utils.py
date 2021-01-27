@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any
 import os
-import utils.config
+import core.util.config
 
 
 def get_agent_feature_ls(agent_df, obs_len, norm_center):

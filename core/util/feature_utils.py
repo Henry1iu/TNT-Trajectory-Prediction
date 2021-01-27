@@ -3,7 +3,7 @@
 # @Time    : 2020-05-27 15:00
 # @Author  : Xiaoke Huang
 # @Email   : xiaokehuang@foxmail.com
-from utils.config import color_dict
+from core.util.config import color_dict
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
 import matplotlib.pyplot as plt
@@ -11,11 +11,11 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any
 import os
-from utils.object_utils import get_nearby_moving_obj_feature_ls
-from utils.lane_utils import get_nearby_lane_feature_ls, get_halluc_lane
-from utils.viz_utils import show_doubled_lane, show_traj
-from utils.agent_utils import get_agent_feature_ls
-from utils.viz_utils import *
+from core.util.object_utils import get_nearby_moving_obj_feature_ls
+from core.util.lane_utils import get_nearby_lane_feature_ls, get_halluc_lane
+from core.util.viz_utils import show_doubled_lane, show_traj
+from core.util.agent_utils import get_agent_feature_ls
+from core.util.viz_utils import *
 import pdb
 
 
