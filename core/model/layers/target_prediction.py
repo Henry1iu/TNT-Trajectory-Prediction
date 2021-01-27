@@ -9,15 +9,12 @@ class TargetPred(nn.Module):
     def __init__(self,
                  in_channels: int,
                  hidden_dim: int = 64,
-                 M: int = 50,
-                 device=torch.device("cpu")):
+                 m: int = 50):
         """"""
         super(TargetPred, self).__init__()
         self.in_channels = in_channels
         self.hidden_dim = hidden_dim
-        self.M = M          # output candidate target
-
-        self.device = device
+        self.M = m          # output candidate target
 
         self.prob_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),

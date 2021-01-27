@@ -5,7 +5,16 @@ import torch.nn.functional as F
 
 
 class MotionEstimation(nn.Module):
-    def __init__(self, in_channels, horizon=30, hidden_dim=64):
+    def __init__(self,
+                 in_channels,
+                 horizon=30,
+                 hidden_dim=64):
+        """
+        estimate the trajectories based on the predicted targets
+        :param in_channels:
+        :param horizon:
+        :param hidden_dim:
+        """
         super(MotionEstimation, self).__init__()
         self.in_channels = in_channels
         self.horizon = horizon
@@ -53,7 +62,7 @@ class MotionEstimation(nn.Module):
         traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
 
         loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction=reduction)
-        return loss
+        return loss, traj_pred
 
     def inference(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """

@@ -33,9 +33,13 @@ def distance_metric(traj_candidate: torch.Tensor, traj_gt: torch.Tensor):
 
 
 class TrajScoreSelection(nn.Module):
-    def __init__(self, feat_channels, horizon, hidden_dim=64, temper=0.01):
+    def __init__(self,
+                 feat_channels,
+                 horizon=30,
+                 hidden_dim=64,
+                 temper=0.01):
         """
-        init
+        init trajectories scoring and selection module
         :param feat_channels: int, number of channels
         :param horizon: int, prediction horizon, prediction time x pred_freq
         :param hidden_dim: int, hidden dimension
