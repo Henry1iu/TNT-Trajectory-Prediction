@@ -3,6 +3,7 @@
 # @Time    : 2020-05-27 15:00
 # @Author  : Xiaoke Huang
 # @Email   : xiaokehuang@foxmail.com
+
 from core.util.config import color_dict
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
@@ -101,7 +102,8 @@ def compute_feature_for_one_seq(traj_df: pd.DataFrame, am: ArgoverseMap, obs_len
 
 def trans_gt_offset_format(gt):
     """
-    >Our predicted trajectories are parameterized as per-stepcoordinate offsets, starting from the last observed location.We rotate the coordinate system based on the heading of the target vehicle at the last observed location.
+    >Our predicted trajectories are parameterized as per-stepcoordinate offsets, starting from the last observed location.
+    We rotate the coordinate system based on the heading of the target vehicle at the last observed location.
     
     """
     assert gt.shape == (30, 2) or gt.shape == (0, 2), f"{gt.shape} is wrong"
