@@ -58,6 +58,7 @@ class TargetPred(nn.Module):
         # compute the prob. of normal distribution
         d_x_dist = Normal(tar_offset_mean[:, :, 0], torch.tensor([1.0]))    # [batch_size, self.N_tar]
         d_y_dist = Normal(tar_offset_mean[:, :, 1], torch.tensor([1.0]))    # [batch_size, self.N_tar]
+
         d_x = d_x_dist.sample()
         d_y = d_y_dist.sample()
 
@@ -66,6 +67,7 @@ class TargetPred(nn.Module):
 
         return tar_candit_pro, d_x, d_y, indices
 
+    # todo: offset_gt for every tar_candidate
     def loss(self,
              feat_in: torch.Tensor,
              tar_candidate: torch.Tensor,

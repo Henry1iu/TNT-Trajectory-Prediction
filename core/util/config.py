@@ -21,8 +21,8 @@ STATIONARY_THRESHOLD = (13)
 color_dict = {"AGENT": "#d33e4c", "OTHERS": "#d3e8ef", "AV": "#007672"}
 LANE_RADIUS = 30
 OBJ_RADIUS = 30
-#DATA_DIR = './test_mxy'
-DATA_DIR = './raw_data'
+
+DATA_DIR = '../../dataset/raw_data'
 OBS_LEN = 20
-INTERMEDIATE_DATA_DIR = './interm_data'
-#INTERMEDIATE_DATA_DIR = './interm_mxy'
+
+INTERMEDIATE_DATA_DIR = '../../dataset/interm_data_10_feat'

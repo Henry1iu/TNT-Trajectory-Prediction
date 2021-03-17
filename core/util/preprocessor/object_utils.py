@@ -3,14 +3,14 @@
 # @Time    : 2020-05-27 15:00
 # @Author  : Xiaoke Huang
 # @Email   : xiaokehuang@foxmail.com
-from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
-from argoverse.map_representation.map_api import ArgoverseMap
-import matplotlib.pyplot as plt
+
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Any
-import os
-from utils.config import VELOCITY_THRESHOLD, RAW_DATA_FORMAT, OBJ_RADIUS, EXIST_THRESHOLD
+
+from core.util.config import VELOCITY_THRESHOLD, RAW_DATA_FORMAT, OBJ_RADIUS, EXIST_THRESHOLD
+
+VELOCITY_THRESHOLD = 13
 
 
 def compute_velocity(track_df: pd.DataFrame) -> List[float]:
@@ -36,7 +36,7 @@ def compute_velocity(track_df: pd.DataFrame) -> List[float]:
     return vel
 
 
-def get_is_track_stationary(track_df: pd.DataFrame) -> bool:
+def is_track_stationary(track_df: pd.DataFrame) -> bool:
     """Check if the track is stationary.
 
     Args:
@@ -56,7 +56,8 @@ def fill_track_lost_in_middle(
         seq_timestamps: np.ndarray,
         raw_data_format: Dict[str, int],
 ) -> np.ndarray:
-    """Handle the case where the object exited and then entered the frame but still retains the same track id. It'll be a rare case.
+    """Handle the case where the object exited and then entered the frame but still retains the same track id.
+        It'll be a rare case.
 
     Args:
         track_array (numpy array): Padded data for the track
@@ -82,8 +83,7 @@ def pad_track(
         track_df: pd.DataFrame,
         seq_timestamps: np.ndarray,
         obs_len: int,
-        raw_data_format: Dict[str, int],
-) -> np.ndarray:
+        raw_data_format: Dict[str, int], ) -> np.ndarray:
     """Pad incomplete tracks.
 
     Args:
@@ -129,7 +129,7 @@ def get_nearby_moving_obj_feature_ls(agent_df, traj_df, obs_len, seq_ts, norm_ce
         if remain_df['OBJECT_TYPE'].iloc[0] == 'AGENT':
             continue
 
-        if len(remain_df) < EXIST_THRESHOLD or get_is_track_stationary(remain_df):
+        if len(remain_df) < EXIST_THRESHOLD or is_track_stationary(remain_df):
             continue
 
         xys, ts = None, None
@@ -151,7 +151,6 @@ def get_nearby_moving_obj_feature_ls(agent_df, traj_df, obs_len, seq_ts, norm_ce
         ts = (ts[:-1] + ts[1:]) / 2
         # if not xys.shape[0] == ts.shape[0]:
         #     from pdb import set_trace;set_trace()
-
 
         obj_feature_ls.append(
             [xys, remain_df['OBJECT_TYPE'].iloc[0], ts, track_id])

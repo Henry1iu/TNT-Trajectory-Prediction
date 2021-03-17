@@ -4,23 +4,31 @@
 # @Author  : Xiaoke Huang
 # @Email   : xiaokehuang@foxmail.com
 
-from core.util.config import color_dict
-from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
-from argoverse.map_representation.map_api import ArgoverseMap
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List
 import os
-from core.util.object_utils import get_nearby_moving_obj_feature_ls
-from core.util.lane_utils import get_nearby_lane_feature_ls, get_halluc_lane
+
+from argoverse.map_representation.map_api import ArgoverseMap
+
+from core.util.config import color_dict
+from core.util.preprocessor.object_utils import get_nearby_moving_obj_feature_ls
+from core.util.preprocessor.lane_utils import get_nearby_lane_feature_ls
 from core.util.viz_utils import show_doubled_lane, show_traj
 from core.util.agent_utils import get_agent_feature_ls
-from core.util.viz_utils import *
-import pdb
+# from core.util.viz_utils import *
 
 
-def compute_feature_for_one_seq(traj_df: pd.DataFrame, am: ArgoverseMap, obs_len: int = 20, lane_radius: int = 5, obj_radius: int = 10, viz: bool = False, mode='rect', query_bbox=[-100, 100, -100, 100]) -> List[List]:
+def compute_feature_for_one_seq(
+        traj_df: pd.DataFrame,
+        am: ArgoverseMap,
+        obs_len: int = 20,
+        lane_radius: int = 5,
+        obj_radius: int = 10,
+        viz: bool = False,
+        mode='rect',
+        query_bbox=[-100, 100, -100, 100]) -> List[List]:
     """
     return lane & track features
     args:
@@ -31,7 +39,8 @@ def compute_feature_for_one_seq(traj_df: pd.DataFrame, am: ArgoverseMap, obs_len
         obj_feature_ls:
             list of list of (doubled_track, object_type, timestamp, track_id)
         lane_feature_ls:
-            list of list of lane a segment feature, formatted in [left_lane, right_lane, is_traffic_control, is_intersection, lane_id]
+            list of list of lane a segment feature,
+             formatted in [left_lane, right_lane, is_traffic_control, is_intersection, lane_id]
         norm_center np.ndarray: (2, )
     """
     # normalize timestamps
@@ -41,10 +50,9 @@ def compute_feature_for_one_seq(traj_df: pd.DataFrame, am: ArgoverseMap, obs_len
     seq_len = seq_ts.shape[0]
     city_name = traj_df['CITY_NAME'].iloc[0]
     agent_df = None
-    agent_x_end, agent_y_end, start_x, start_y, query_x, query_y, norm_center = [
-        None] * 7
+    agent_x_end, agent_y_end, start_x, start_y, query_x, query_y, norm_center = [None] * 7
     # agent traj & its start/end point
-    for obj_type, remain_df in traj_df.groupby('OBJECT_TYPE'):
+    for obj_type, remain_df in traj_df.groupby(''):
         if obj_type == 'AGENT':
             agent_df = remain_df
             start_x, start_y = agent_df[['X', 'Y']].values[0]
@@ -68,12 +76,16 @@ def compute_feature_for_one_seq(traj_df: pd.DataFrame, am: ArgoverseMap, obs_len
     # lane_feature_ls = get_nearby_lane_feature_ls(
     #     am, agent_df, obs_len, city_name, lane_radius, norm_center)
     lane_feature_ls = get_nearby_lane_feature_ls(
-        am, agent_df, obs_len, city_name, lane_radius, norm_center, mode=mode, query_bbox=query_bbox)
+        am, agent_df, obs_len, city_name, lane_radius, norm_center, mode=mode, query_bbox=query_bbox
+    )
     # pdb.set_trace()
+    print("found {} lane features".format(len(lane_feature_ls)))
 
     # search nearby moving objects from the last observed point of agent
     obj_feature_ls = get_nearby_moving_obj_feature_ls(
         agent_df, traj_df, obs_len, seq_ts, norm_center)
+    print("found {} object features".format(len(obj_feature_ls)))
+
     # get agent features
     agent_feature = get_agent_feature_ls(agent_df, obs_len, norm_center)
 
@@ -141,7 +153,6 @@ def encoding_features(agent_feature, obj_feature_ls, lane_feature_ls):
             lane_id2mask: Dict[int, int]
         )
         where obejct_type = {0 - others, 1 - agent}
-
     """
     polyline_id = 0
     traj_id2mask, lane_id2mask = {}, {}
@@ -167,7 +178,7 @@ def encoding_features(agent_feature, obj_feature_ls, lane_feature_ls):
         obj_len = obj_feature[0].shape[0]
         # assert obj_feature[2].shape[0] == obj_len, f"obs_len of obj is {obj_len}"
         if not obj_feature[2].shape[0] == obj_len:
-            from pdb import set_trace;set_trace()
+            from pdb import set_trace; set_trace()
         obj_nd = np.hstack((obj_feature[0], np.zeros(
             (obj_len, 1)), obj_feature[2].reshape((-1, 1)), np.ones((obj_len, 1)) * polyline_id))
         assert obj_nd.shape[1] == 7, "obj_traj feature dim 1 is not correct"
@@ -183,7 +194,8 @@ def encoding_features(agent_feature, obj_feature_ls, lane_feature_ls):
         l_lane_len = lane_feature[0].shape[0]
         l_lane_nd = np.hstack(
             (lane_feature[0], (lane_feature[2]) * np.ones((l_lane_len, 1)),
-             (lane_feature[3]) * np.ones((l_lane_len, 1)), np.ones((l_lane_len, 1)) * polyline_id))
+             (lane_feature[3]) * np.ones((l_lane_len, 1)), np.ones((l_lane_len, 1)) * polyline_id)
+        )
         assert l_lane_nd.shape[1] == 9, "obj_traj feature dim 1 is not correct"
         lane_nd = np.vstack((lane_nd, l_lane_nd))
         lane_id2mask[polyline_id] = (pre_lane_len, lane_nd.shape[0])
