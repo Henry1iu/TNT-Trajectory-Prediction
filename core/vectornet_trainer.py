@@ -69,8 +69,8 @@ class VectorNetTrainer(Trainer):
         # init or load model
         self.aux_loss = aux_loss
         # input dim: (20, 8); output dim: (30, 2)
-        model_name = VectorNet
-        # model_name = OriginalVectorNet
+        # model_name = VectorNet
+        model_name = OriginalVectorNet
         self.model = model_name(
             8,
             30,
