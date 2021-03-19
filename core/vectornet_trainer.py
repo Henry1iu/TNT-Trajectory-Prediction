@@ -24,7 +24,7 @@ class VectorNetTrainer(Trainer):
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=5,
+                 warmup_epoch=15,
                  aux_loss: bool = False,
                  with_cuda: bool = False,
                  cuda_device=None,
@@ -114,33 +114,37 @@ class VectorNetTrainer(Trainer):
         avg_loss = 0.0
         num_sample = 0
 
-        data_iter = tqdm(enumerate(dataloader),
-                         desc="{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
-                                                                               epoch,
-                                                                               0.0,
-                                                                               avg_loss),
-                         total=len(dataloader),
-                         bar_format="{l_bar}{r_bar}")
+        data_iter = tqdm(
+            enumerate(dataloader),
+            desc="{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
+                                                                   epoch,
+                                                                   0.0,
+                                                                   avg_loss),
+            total=len(dataloader),
+            bar_format="{l_bar}{r_bar}"
+        )
 
         for i, data in data_iter:
             if training:
                 pred, aux_out, aux_gt = self.model(data.to(self.device))
-                loss = self.criterion(pred,
-                                      data.y.view(-1, self.model.out_channels * self.model.pred_len),
-                                      aux_out,
-                                      aux_gt)
+                loss = self.criterion(
+                    pred,
+                    data.y.view(-1, self.model.out_channels * self.model.pred_len),
+                    aux_out,
+                    aux_gt
+                )
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
                 self.optim.step()
-                self.write_log("Train Loss", loss.item(), epoch)
+                self.write_log("Train Loss", loss.item(), i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
                     pred = self.model(data.to(self.device))
                     loss = self.criterion(pred,
                                           data.y.view(-1, self.model.out_channels * self.model.pred_len))
-                    self.write_log("Eval Loss", loss.item(), epoch)
+                    self.write_log("Eval Loss", loss.item(), i + epoch * len(dataloader))
 
             num_sample += self.batch_size
             avg_loss += loss.item()
