@@ -7,12 +7,15 @@ from os.path import join as pjoin
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
+from multiprocessing.dummy import Pool
 
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
 
 from core.util.preprocessor.base import Preprocessor
 from core.util.preprocessor.object_utils import is_track_stationary
+
+DEBUG = True
 
 
 class ArgoversePreprocessor(Preprocessor):
@@ -40,6 +43,9 @@ class ArgoversePreprocessor(Preprocessor):
 
     def generate(self):
         for i, loader in enumerate(self.loaders):
+            # add for debug
+            if "test" in self.folders[i] and DEBUG:
+                continue
             for f_path in tqdm(loader.seq_list, desc=f"Processing {self.folders[i]}..."):
                 seq = loader.get(f_path)
                 path, seq_f_name_ext = os.path.split(f_path)
@@ -173,24 +179,33 @@ class ArgoversePreprocessor(Preprocessor):
         else:
             polyline_features = traj_nd
 
-        data = [[polyline_features.astype(np.float32),
-                 offset_gt, traj_id2mask, lane_id2mask, traj_nd.shape[0], lane_nd.shape[0]]]
+        data = [[polyline_features.astype(np.float32), offset_gt, agent_feature[-3], agent_feature[-2],
+                 traj_id2mask, lane_id2mask, traj_nd.shape[0], lane_nd.shape[0]]]
 
         return pd.DataFrame(
             data,
-            columns=["POLYLINE_FEATURES", "GT",
+            columns=["POLYLINE_FEATURES", "GT", "CANDIDATES", "CANDIDATE_GT",
                      "TRAJ_ID_TO_MASK", "LANE_ID_TO_MASK", "TARJ_LEN", "LANE_LEN"]
         )
 
     def __extract_agent_feat(self, agent_df, norm_center):
         xys, gt_xys = agent_df[["X", "Y"]].values[:self.obs_horizon], agent_df[["X", "Y"]].values[self.obs_horizon:]
         xys = self.__norm_and_vec__(xys, norm_center)
-        gt_xys -= norm_center  # normalize to last observed timestamp point of agent
 
         ts = agent_df['TIMESTAMP'].values[:self.obs_horizon]
         ts = (ts[:-1] + ts[1:]) / 2
 
-        return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0], gt_xys]
+        candidates = self.uniform_candidate_sampling(50)
+        gt_xys -= norm_center  # normalize to last observed timestamp point of agent
+
+        # handle the gt
+        if len(gt_xys) > 0:
+            # todo: adjust the range for candidate sampling, now radian of 50 meter, 900 samples
+            candidate_gt = self.get_candidate_gt(candidates, gt_xys[-1, :])
+        else:
+            candidate_gt = None
+
+        return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0], candidates, candidate_gt, gt_xys]
 
     def __extract_obj_feat(self, obj_df, norm_center):
         obj_feat_ls = []
@@ -324,11 +339,26 @@ class ArgoversePreprocessor(Preprocessor):
 
         return offset_gt
 
+    def process_and_save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None, map_feat=True):
+        enc_df = self.process(dataframe, map_feat)
+        self.save(enc_df, set_name, file_name, dir_)
+
 
 if __name__ == "__main__":
     pth = "/media/Data/autonomous_driving/Argoverse/raw_data"
     argoverse_processor = ArgoversePreprocessor(pth)
 
-    # todo: multi-thread processing
-    for s_name, f_name, df in argoverse_processor.generate():
-        argoverse_processor.save(argoverse_processor.process(df), s_name, f_name)
+    if not DEBUG:
+        pool = Pool(15)
+        # todo: multi-thread processing
+        for s_name, f_name, df in argoverse_processor.generate():
+            pool.apply_async(func=argoverse_processor.process_and_save, args=(df, s_name, f_name))
+
+        pool.close()
+        pool.join()
+        pool.terminate()
+    else:
+        for s_name, f_name, df in argoverse_processor.generate():
+            argoverse_processor.process_and_save(df, s_name, f_name)
+
+

@@ -3,6 +3,7 @@
 # Date:     2021.01.30
 
 import os
+import numpy as np
 import pandas as pd
 
 
@@ -67,14 +68,53 @@ class Preprocessor(object):
             return
 
         if not dir_:
-            dir_ = os.path.join(self.root_dir, set_name, "processed")
+            dir_ = os.path.join(self.root_dir, set_name + "_processed")
         else:
-            dir_ = os.path.join(dir_, set_name, "processed")
+            dir_ = os.path.join(dir_, set_name + "_processed")
         if not os.path.exists(dir_):
             os.makedirs(dir_)
 
         fname = f"features_{file_name}.csv"
         dataframe.to_csv(os.path.join(dir_, fname))
+
+    def process_and_save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None, map_feat=True):
+        """
+        save the feature in the data sequence in a single csv files
+        :param dataframe: DataFrame, the data frame
+        :param set_name: str, the name of the folder name, exp: train, eval, test
+        :param file_name: str, the name of csv file
+        :param dir_: str, the directory to store the csv file
+        :return:
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def uniform_candidate_sampling(sampling_range, rate=30):
+        """
+        uniformly sampling of the target candidate
+        :param sampling_range: int, the maximum range of the sampling
+        :param rate: the sampling rate (num. of samples)
+        return rate^2 candidate samples
+        """
+        x = np.linspace(-rate, rate, 30) * (sampling_range / rate)
+        return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
+
+    # todo: uniform sampling along he land
+    # @staticmethod
+    # def lane_candidate_sampling():
+
+    @staticmethod
+    def get_candidate_gt(target_candidate, gt_target):
+        """
+        find the target candidate closest to the gt and output the one-hot ground truth
+        :param target_candidate, (N, 2) candidates
+        :param gt_target, (1, 2) the coordinate of final target
+        """
+        displacement = target_candidate - gt_target
+        gt_index = np.argmin(np.power(displacement[:, 0], 2) + np.power(displacement[:, 1], 2))
+        onehot = np.zeros((target_candidate.shape[0], 1))
+        onehot[gt_index] = 1
+        return onehot
 
 
 # example of preprocessing scripts
