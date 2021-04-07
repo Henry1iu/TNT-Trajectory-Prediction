@@ -1,16 +1,18 @@
 # TNT model
 import os
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.data import DataLoader
 
 from core.model.backbone.vectornet import VectorNetBackbone
 from core.model.layers.target_prediction import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
-from core.model.layers.scoring_and_selection import TrajScoreSelection
+from core.model.layers.scoring_and_selection import TrajScoreSelection, distance_metric
 
-from core.dataloader.dataset import GraphDataset, GraphData
+from core.dataloader.argoverse_loader import Argoverse, GraphData
 
 
 class TNT(nn.Module):
@@ -23,7 +25,7 @@ class TNT(nn.Module):
                  global_graph_width=64,
                  with_aux=False,
                  aux_width=64,
-                 n=1000,
+                 n=900,
                  target_pred_hid=64,
                  m=50,
                  motion_esti_hid=64,
@@ -85,7 +87,8 @@ class TNT(nn.Module):
         self.target_pred_layer = TargetPred(
             in_channels=global_graph_width,
             hidden_dim=target_pred_hid,
-            m=m
+            m=m,
+            device=device
         )
         self.motion_estimator = MotionEstimation(
             in_channels=global_graph_width,
@@ -96,7 +99,8 @@ class TNT(nn.Module):
             feat_channels=global_graph_width,
             horizon=horizon,
             hidden_dim=score_sel_hid,
-            temper=temperature
+            temper=temperature,
+            device=self.device
         )
 
     def forward(self, data):
@@ -105,7 +109,7 @@ class TNT(nn.Module):
         :param data: observed sequence data
         :return:
         """
-        target_candidate = data.target_candidate.view(-1, self.N, 2)    # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.N, 2)    # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]
@@ -128,7 +132,7 @@ class TNT(nn.Module):
 
         return self.traj_selection(traj_pred, score)
 
-    def loss(self, data, gt, reduction="mean"):
+    def loss(self, data, reduction="mean"):
         """
         compute loss according to the gt
         :param data: node feature data
@@ -136,18 +140,20 @@ class TNT(nn.Module):
         :param reduction: reduction method, "mean", "sum" or "batchmean"
         :return:
         """
-        target_candidate = data.target_candidate.view(-1, self.N, 2)  # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.n, 2)  # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, aux_out, aux_gt = self.backbone(data)  # [batch_size, time_step_len, global_graph_width]
         target_feat = global_feat[:, 0]
+
+        candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
         loss = 0.0
         if self.with_aux:
             loss += F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
 
         # add the target prediction loss
-        candidate_gt, offset_gt = gt.candidate_gt.view(-1, self.n), gt.offset_gt.view(-1, 2)
+        candidate_gt, offset_gt = candidate_gt.view(-1, self.n).float(), offset_gt.view(-1, 2)
         loss += self.lambda1 * self.target_pred_layer.loss(
             target_feat,
             target_candidate,
@@ -157,7 +163,7 @@ class TNT(nn.Module):
         )
 
         # add the motion estimation loss
-        location_gt, traj_gt = gt.location_gt.view(-1, 2), gt.traj_gt.view(-1, self.horizon * 2)
+        location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
         traj_loss, pred_traj = self.motion_estimator.loss(
             target_feat,
             location_gt,
@@ -187,11 +193,13 @@ class TNT(nn.Module):
         """
         raise NotImplementedError
 
-    def traj_selection(self, traj_in, score):
+    # todo: determine appropiate threshold
+    def traj_selection(self, traj_in, score, threshold=0.5):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
         :param score: score of the candidate trajectories, [batch, M]
+        :param threshold: float, the threshold for exclude traj prediction
         :return: [batch_size, k, horizon * 2]
         """
         # re-arrange trajectories according the the descending order of the score
@@ -200,16 +208,32 @@ class TNT(nn.Module):
         traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
 
         #todo: check the distance between them
+        # traj_cnt = 1
+        # for i in range(1, self.m):
+        #     dis = torch.cat([distance_metric(traj_pred[:, i], traj_selected[:, j]) for j in range(0, traj_cnt)], dim=1)
+        #     if torch.any(dis < threshold)
 
         return traj_selected
 
 
 if __name__ == "__main__":
     batch_size = 2
-    n = 1000
+    DATA_DIR = "../../dataset/interm_tnt_with_filter"
+    TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
+    # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
+
+    dataset = Argoverse(TRAIN_DIR)
+    data_iter = DataLoader(dataset, batch_size=batch_size)
+
+    n = 900
     m = 50
     k = 6
 
-    model = TNT(n=n, m=m, k=k)
+    device = torch.device("cuda:1")
+
+    model = TNT(in_channels=10, n=n, m=m, k=k, device=device).to(device)
     model.train()
+
+    for data in tqdm(data_iter):
+        loss = model.loss(data.to(device))
 

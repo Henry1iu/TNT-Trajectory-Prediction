@@ -19,13 +19,10 @@ class GlobalGraph(nn.Module):
                  global_graph_width,
                  num_global_layers=1,
                  need_scale=False,
-                 with_norm=False,
-                 device=torch.device("cpu")):
+                 with_norm=False):
         super(GlobalGraph, self).__init__()
         self.in_channels = in_channels
         self.global_graph_width = global_graph_width
-
-        self.device = device
 
         self.layers = nn.Sequential()
         for i in range(num_global_layers):
@@ -33,8 +30,7 @@ class GlobalGraph(nn.Module):
                 f'glp_{i}', SelfAttentionLayer(self.in_channels,
                                                self.global_graph_width,
                                                need_scale,
-                                               with_norm,
-                                               self.device)
+                                               with_norm)
             )
 
     def forward(self, global_data):
@@ -59,16 +55,16 @@ class SelfAttentionLayer(MessagePassing):
                  in_channels,
                  global_graph_width,
                  need_scale=False,
-                 with_norm=False,
-                 device=torch.device("cpu")):
+                 with_norm=False):
         super(SelfAttentionLayer, self).__init__(aggr='add')
         self.in_channels = in_channels
         self.with_norm = with_norm
-        self.device = device
 
-        self.q_lin = nn.Linear(global_graph_width, global_graph_width)
-        self.k_lin = nn.Linear(global_graph_width, global_graph_width)
-        self.v_lin = nn.Linear(global_graph_width, global_graph_width)
+        self.global_graph_width = global_graph_width
+
+        self.q_lin = nn.Linear(in_channels, global_graph_width)
+        self.k_lin = nn.Linear(in_channels, global_graph_width)
+        self.v_lin = nn.Linear(in_channels, global_graph_width)
 
         self.scale_factor_d = 1 + \
             int(np.sqrt(self.in_channels)) if need_scale else 1
@@ -87,7 +83,7 @@ class SelfAttentionLayer(MessagePassing):
         attention_weights = self.masked_softmax(scores, valid_len)
         x = torch.bmm(attention_weights, value)
 
-        x = x.view(-1, self.in_channels)
+        x = x.view(-1, self.global_graph_width)
         return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)
 
     def message(self, x_j):

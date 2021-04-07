@@ -41,10 +41,9 @@ class VectorNetBackbone(nn.Module):
         self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
 
         # global graph
-        self.global_graph = GlobalGraph(self.subgraph_width,
+        self.global_graph = GlobalGraph(self.polyline_vec_shape,
                                         self.global_graph_width,
-                                        num_global_layers=num_global_graph_layer,
-                                        device=self.device)
+                                        num_global_layers=num_global_graph_layer)
 
         # auxiliary recoverey mlp
         self.with_aux = with_aux
@@ -53,7 +52,7 @@ class VectorNetBackbone(nn.Module):
                 nn.Linear(global_graph_width, aux_mlp_width),
                 nn.LayerNorm(aux_mlp_width),
                 nn.ReLU(),
-                nn.Linear(aux_mlp_width, subgraph_width)
+                nn.Linear(aux_mlp_width, self.polyline_vec_shape)
             )
 
     def forward(self, data):
@@ -68,15 +67,15 @@ class VectorNetBackbone(nn.Module):
         # print("data batch size:", data.num_batch)
 
         sub_graph_out = self.subgraph(data)
-        x = sub_graph_out.x.view(-1, time_step_len, self.subgraph_width)
+        x = sub_graph_out.x.view(-1, time_step_len, self.polyline_vec_shape)
 
         if self.training and self.with_aux:
             batch_size = x.size()[0]
             mask_polyline_indices = [random.randint(0, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
-            x = x.view(-1, self.subgraph_width)
+            x = x.view(-1, self.polyline_vec_shape)
             aux_gt = x[mask_polyline_indices]
             x[mask_polyline_indices] = 0.0
-            x = x.view(-1, time_step_len, self.subgraph_width)
+            x = x.view(-1, time_step_len, self.polyline_vec_shape)
 
         # TODO: compute the adjacency matrix???
         # reconstruct the batch global interaction graph data
@@ -140,7 +139,7 @@ if __name__ == "__main__":
     model = VectorNetBackbone(in_channels, pred_len, with_aux=True).to(device)
     # model = OriginalVectorNet(in_channels, pred_len, with_aux=True).to(device)
 
-    DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
+    DATA_DIR = "dataset/interm_data"
     TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
 
     dataset = GraphDataset(TRAIN_DIR)

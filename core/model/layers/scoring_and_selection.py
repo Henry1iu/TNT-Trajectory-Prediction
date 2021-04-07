@@ -37,7 +37,8 @@ class TrajScoreSelection(nn.Module):
                  feat_channels,
                  horizon=30,
                  hidden_dim=64,
-                 temper=0.01):
+                 temper=0.01,
+                 device=torch.device("cpu")):
         """
         init trajectories scoring and selection module
         :param feat_channels: int, number of channels
@@ -50,12 +51,14 @@ class TrajScoreSelection(nn.Module):
         self.horizon = horizon
         self.temper = temper
 
+        self.device = device
+
         self.score_mlp = nn.Sequential(
             nn.Linear(feat_channels + horizon * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1),
-            nn.Softmax(dim=2)
+            nn.Softmax()
         )
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
@@ -83,10 +86,10 @@ class TrajScoreSelection(nn.Module):
 
         # compute ground truth score
         score_gt = F.softmax(distance_metric(traj_in, traj_gt), dim=1)
-        score_pred = self.forward(feat_in, traj_in)
+        score_pred = self.score_mlp(torch.cat([feat_in, traj_in], dim=1))
 
         return F.kl_div(score_pred, score_gt, reduction=reduction) + \
-               F.kl_div(score_pred, torch.ones(score_pred.size()), reduction=reduction)
+               F.kl_div(score_pred, torch.ones(score_pred.size(), device=self.device), reduction=reduction)
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """

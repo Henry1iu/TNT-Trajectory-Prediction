@@ -68,14 +68,15 @@ class Preprocessor(object):
             return
 
         if not dir_:
-            dir_ = os.path.join(self.root_dir, set_name + "_processed")
+            dir_ = os.path.join(os.path.split(self.root_dir)[0], "intermediate", set_name + "_intermediate", "raw")
         else:
-            dir_ = os.path.join(dir_, set_name + "_processed")
+            dir_ = os.path.join(dir_, set_name + "_intermediate", "raw")
         if not os.path.exists(dir_):
             os.makedirs(dir_)
 
-        fname = f"features_{file_name}.csv"
-        dataframe.to_csv(os.path.join(dir_, fname))
+        fname = f"features_{file_name}.pkl"
+        dataframe.to_pickle(os.path.join(dir_, fname))
+        # print("[Preprocessor]: Saving data to {} with name: {}...".format(dir_, fname))
 
     def process_and_save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None, map_feat=True):
         """
@@ -110,11 +111,13 @@ class Preprocessor(object):
         :param target_candidate, (N, 2) candidates
         :param gt_target, (1, 2) the coordinate of final target
         """
-        displacement = target_candidate - gt_target
+        displacement = gt_target - target_candidate
         gt_index = np.argmin(np.power(displacement[:, 0], 2) + np.power(displacement[:, 1], 2))
         onehot = np.zeros((target_candidate.shape[0], 1))
         onehot[gt_index] = 1
-        return onehot
+
+        offset_xy = gt_target - target_candidate[gt_index]
+        return onehot, offset_xy
 
 
 # example of preprocessing scripts

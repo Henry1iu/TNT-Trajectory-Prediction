@@ -9,12 +9,15 @@ class TargetPred(nn.Module):
     def __init__(self,
                  in_channels: int,
                  hidden_dim: int = 64,
-                 m: int = 50):
+                 m: int = 50,
+                 device=torch.device("cpu")):
         """"""
         super(TargetPred, self).__init__()
         self.in_channels = in_channels
         self.hidden_dim = hidden_dim
         self.M = m          # output candidate target
+
+        self.device = device
 
         self.prob_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
@@ -46,26 +49,27 @@ class TargetPred(nn.Module):
         _, N, _ = tar_candidate.size()
 
         # stack the target candidates to the end of input feature
-        feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate], dim=2)
-        print("feat_in_repeat size: ", feat_in_repeat.size())
+        feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate.float()], dim=2)
+        # feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate.float()], dim=2)
+        # print("feat_in_repeat size: ", feat_in_repeat.size())
 
         # compute probability for each candidate
-        tar_candit_pro = self.prob_mlp(feat_in_repeat).squeeze(-1)          # [batch_size, self.N_tar, 1]
+        tar_candit_prob = self.prob_mlp(feat_in_repeat).squeeze(-1)          # [batch_size, self.N_tar, 1]
         tar_offset_mean = self.mean_mlp(feat_in_repeat)                     # [batch_size, self.N_tar, 2]
-        print("tar_candit_pro size: ", tar_candit_pro.size())
-        print("tar_offset_mean size: ", tar_offset_mean.size())
+        # print("tar_candit_pro size: ", tar_candit_prob.size())
+        # print("tar_offset_mean size: ", tar_offset_mean.size())
 
         # compute the prob. of normal distribution
-        d_x_dist = Normal(tar_offset_mean[:, :, 0], torch.tensor([1.0]))    # [batch_size, self.N_tar]
-        d_y_dist = Normal(tar_offset_mean[:, :, 1], torch.tensor([1.0]))    # [batch_size, self.N_tar]
+        d_x_dist = Normal(tar_offset_mean[:, :, 0], torch.tensor([1.0], device=self.device))    # [batch_size, self.N_tar]
+        d_y_dist = Normal(tar_offset_mean[:, :, 1], torch.tensor([1.0], device=self.device))    # [batch_size, self.N_tar]
 
         d_x = d_x_dist.sample()
         d_y = d_y_dist.sample()
 
-        p = tar_candit_pro * d_x_dist.log_prob(d_x) * d_y_dist.log_prob(d_y)
-        _, indices = p.topk(self.M, dim=1)
+        # p = tar_candit_pro * d_x_dist.log_prob(d_x) * d_y_dist.log_prob(d_y)
+        _, indices = tar_candit_prob.topk(self.M, dim=1)
 
-        return tar_candit_pro, d_x, d_y, indices
+        return tar_candit_prob, d_x, d_y, indices
 
     # todo: offset_gt for every tar_candidate
     def loss(self,
@@ -79,7 +83,7 @@ class TargetPred(nn.Module):
         only the closest candidate is labeled as 1
         :param feat_in: encoded feature for the target candidate, [batch_size, inchannels]
         :param tar_candidate: the target candidates for predicting the end position of the target agent, [batch_size, N, 2]
-        :param tar_gt: target prediction ground truth, classification gt and offset gt, [batch_size, N]
+        :param candidate_gt: target prediction ground truth, classification gt and offset gt, [batch_size, N]
         :param offset_gt: the offset ground truth, [batch_size, 2]
         :param reduction: the reduction to apply to the loss output
         :return:
@@ -88,7 +92,7 @@ class TargetPred(nn.Module):
         tar_pred_prob, dx, dy, top_m_indices = self.forward(feat_in, tar_candidate)
 
         # select the M output and gt
-        index_offset = torch.arange(0, batch_size).view(batch_size, -1).repeat(1, self.M).view(-1)
+        index_offset = torch.arange(0, batch_size, device=self.device).view(batch_size, -1).repeat(1, self.M).view(-1)
         top_m_indices = top_m_indices.view(-1) + index_offset * N
         tar_pred_prob_selected = F.normalize(tar_pred_prob.view(-1)[top_m_indices].view(batch_size, -1))
         candidate_gt_selected = candidate_gt.view(-1)[top_m_indices].unsqueeze(1).view(batch_size, -1)
@@ -97,7 +101,10 @@ class TargetPred(nn.Module):
         n_candidate_loss = F.binary_cross_entropy(tar_pred_prob, candidate_gt, reduction=reduction)
         m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
 
-        offset_loss = F.smooth_l1_loss(torch.cat([dx.unsqueeze(2), dy.unsqueeze(2)], dim=2), offset_gt, reduction=reduction)
+        offset_pred = torch.cat([dx.unsqueeze(2), dy.unsqueeze(2)], dim=2)
+        offset_loss = F.smooth_l1_loss(offset_pred[candidate_gt.bool().unsqueeze(2).repeat(1, 1, 2)].view(-1, 2),
+                                       offset_gt,
+                                       reduction=reduction)
 
         return n_candidate_loss + m_candidate_loss + offset_loss
 

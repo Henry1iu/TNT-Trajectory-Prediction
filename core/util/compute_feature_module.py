@@ -10,8 +10,8 @@ from tqdm import tqdm
 import pickle
 # %matplotlib inline
 
-from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
-from argoverse.map_representation.map_api import ArgoverseMap
+from argoverse_loader.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
+from argoverse_loader.map_representation.map_api import ArgoverseMap
 
 from core.util.feature_utils import compute_feature_for_one_seq, encoding_features, save_features
 from core.util.config import DATA_DIR, LANE_RADIUS, OBJ_RADIUS, OBS_LEN, INTERMEDIATE_DATA_DIR

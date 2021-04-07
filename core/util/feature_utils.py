@@ -10,7 +10,7 @@ import pandas as pd
 from typing import List
 import os
 
-from argoverse.map_representation.map_api import ArgoverseMap
+from argoverse_loader.map_representation.map_api import ArgoverseMap
 
 from core.util.config import color_dict
 from core.util.preprocessor.object_utils import get_nearby_moving_obj_feature_ls

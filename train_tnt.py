@@ -8,8 +8,8 @@ import argparse
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 
-from core.dataloader.dataset import GraphDataset
-from core.trainer.vectornet_trainer import VectorNetTrainer
+from core.dataloader.argoverse_loader import Argoverse, GraphData
+from core.trainer.tnt_trainer import TNTTrainer
 
 TEST = False
 
@@ -23,9 +23,13 @@ def train(args):
     :return:
     """
     # data loading
-    train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
-    eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-    test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    # train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+    # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+
+    train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
+    eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+    test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
     loader = DataLoader
     t_loader = loader(train_set[:10] if TEST else train_set,
@@ -51,7 +55,7 @@ def train(args):
         os.makedirs(output_dir)
 
     # init trainer
-    trainer = VectorNetTrainer(
+    trainer = TNTTrainer(
         train_loader=t_loader,
         eval_loader=e_loader,
         test_laoder=ts_loader,

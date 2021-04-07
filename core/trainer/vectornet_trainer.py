@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
 
-from core.trainer import Trainer
+from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
 from core.loss import VectorLoss

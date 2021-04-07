@@ -57,7 +57,6 @@ class ArgoversePreprocessor(Preprocessor):
         # normalize timestamps
         dataframe['TIMESTAMP'] -= np.min(dataframe['TIMESTAMP'].values)
         dataframe = dataframe.sort_values(by="TIMESTAMP")
-        seq_ts = np.unique(dataframe['TIMESTAMP'].values)
 
         # select agent trajectory
         agent_df, obj_df = None, None
@@ -66,13 +65,14 @@ class ArgoversePreprocessor(Preprocessor):
                 agent_df = sub_dataframe
                 query_x, query_y = agent_df[['X', 'Y']].values[self.obs_horizon - 1]
                 norm_center = np.array([query_x, query_y])
+                seq_ts = np.unique(agent_df['TIMESTAMP'].values)
         if not isinstance(agent_df, pd.DataFrame):
             return None, None, None         # return None if no agent in the sequence
         obj_df = dataframe[dataframe.OBJECT_TYPE != "AGENT"]     # remove "AGENT from dataframe"
         obj_df = obj_df[obj_df['TIMESTAMP'] <= seq_ts[self.obs_horizon-1]]  # remove object record after observation
 
         # include object data within the detection range
-        obj_feats = self.__extract_obj_feat(obj_df, norm_center)
+        obj_feats, obj_df = self.__extract_obj_feat(obj_df, norm_center)
 
         lane_feats = None
         if map_feat:
@@ -92,13 +92,15 @@ class ArgoversePreprocessor(Preprocessor):
         polyline_id = 0
         traj_id2mask, lane_id2mask = {}, {}
         gt = agent_feature[-1]
-        traj_nd, lane_nd = np.empty((0, 7)), np.empty((0, 7))
+        traj_nd, lane_nd = np.empty((0, 7)), np.empty((0, 9))
 
         # encoding agent feature
         pre_traj_len = traj_nd.shape[0]
         agent_len = agent_feature[0].shape[0]
-        agent_nd = np.hstack((agent_feature[0], np.ones(
-            (agent_len, 1)), agent_feature[2].reshape((-1, 1)), np.ones((agent_len, 1)) * polyline_id))
+        agent_nd = np.hstack((agent_feature[0],                         # (xs, ys, xe, ye)
+                              np.ones((agent_len, 1)),                  # object type, 1
+                              agent_feature[2].reshape((-1, 1)),        # timestamp
+                              np.ones((agent_len, 1)) * polyline_id))   # polyline id
         assert agent_nd.shape[1] == 7, "obj_traj feature dim 1 is not correct"
 
         offset_gt = self.__trans_gt_offset_format(gt)
@@ -113,8 +115,10 @@ class ArgoversePreprocessor(Preprocessor):
             # assert obj_feature[2].shape[0] == obj_len, f"obs_len of obj is {obj_len}"
             if not obj_feature[2].shape[0] == obj_len:
                 from pdb import set_trace;set_trace()
-            obj_nd = np.hstack((obj_feature[0], np.zeros(
-                (obj_len, 1)), obj_feature[2].reshape((-1, 1)), np.ones((obj_len, 1)) * polyline_id))
+            obj_nd = np.hstack((obj_feature[0],                         # (xs, ys, xe, ye)
+                                np.zeros((obj_len, 1)),                 # object type, 0
+                                obj_feature[2].reshape((-1, 1)),        # timestamp
+                                np.ones((obj_len, 1)) * polyline_id))   # polyline id
             assert obj_nd.shape[1] == 7, "obj_traj feature dim 1 is not correct"
             traj_nd = np.vstack((traj_nd, obj_nd))
 
@@ -130,13 +134,15 @@ class ArgoversePreprocessor(Preprocessor):
         traj_nd = traj_nd[:, [0, 1, 2, 3, 5, 7, 8, 9, 10, 6]]
 
         # encodeing lane feature
-        if not lane_feature_ls:
+        if lane_feature_ls:
             pre_lane_len = lane_nd.shape[0]
             for lane_feature in lane_feature_ls:
                 l_lane_len = lane_feature[0].shape[0]
                 l_lane_nd = np.hstack((
-                    lane_feature[0], (lane_feature[2]) * np.ones((l_lane_len, 1)),
-                    (lane_feature[3]) * np.ones((l_lane_len, 1)), np.ones((l_lane_len, 1)) * polyline_id
+                    lane_feature[0],                                # (xs, ys, zs, xe, ye, ze)
+                    (lane_feature[2]) * np.ones((l_lane_len, 1)),   # traffic control
+                    (lane_feature[3]) * np.ones((l_lane_len, 1)),   # is intersaction
+                    np.ones((l_lane_len, 1)) * polyline_id          # polyline id
                 ))
                 assert l_lane_nd.shape[1] == 9, "obj_traj feature dim 1 is not correct"
                 lane_nd = np.vstack((lane_nd, l_lane_nd))
@@ -147,8 +153,10 @@ class ArgoversePreprocessor(Preprocessor):
 
                 r_lane_len = lane_feature[1].shape[0]
                 r_lane_nd = np.hstack((
-                    lane_feature[1], (lane_feature[2]) * np.ones((l_lane_len, 1)),
-                    (lane_feature[3]) * np.ones((l_lane_len, 1)), np.ones((r_lane_len, 1)) * polyline_id
+                    lane_feature[1],                                # (xs, ys, zs, xe, ye, ze)
+                    (lane_feature[2]) * np.ones((l_lane_len, 1)),   # traffic control
+                    (lane_feature[3]) * np.ones((l_lane_len, 1)),   # is intersaction
+                    np.ones((r_lane_len, 1)) * polyline_id          # polyline id
                 ))
                 assert r_lane_nd.shape[1] == 9, "obj_traj feature dim 1 is not correct"
                 lane_nd = np.vstack((lane_nd, r_lane_nd))
@@ -179,12 +187,14 @@ class ArgoversePreprocessor(Preprocessor):
         else:
             polyline_features = traj_nd
 
-        data = [[polyline_features.astype(np.float32), offset_gt, agent_feature[-3], agent_feature[-2],
+        data = [[polyline_features.astype(np.float32),
+                 offset_gt, agent_feature[-5], agent_feature[-4], agent_feature[-3], agent_feature[-2],
                  traj_id2mask, lane_id2mask, traj_nd.shape[0], lane_nd.shape[0]]]
 
         return pd.DataFrame(
             data,
-            columns=["POLYLINE_FEATURES", "GT", "CANDIDATES", "CANDIDATE_GT",
+            columns=["POLYLINE_FEATURES",
+                     "GT", "CANDIDATES", "CANDIDATE_GT", "OFFSET_GT", "TARGET_GT",
                      "TRAJ_ID_TO_MASK", "LANE_ID_TO_MASK", "TARJ_LEN", "LANE_LEN"]
         )
 
@@ -201,20 +211,21 @@ class ArgoversePreprocessor(Preprocessor):
         # handle the gt
         if len(gt_xys) > 0:
             # todo: adjust the range for candidate sampling, now radian of 50 meter, 900 samples
-            candidate_gt = self.get_candidate_gt(candidates, gt_xys[-1, :])
+            candidate_gt, offset_gt = self.get_candidate_gt(candidates, gt_xys[-1, :])
         else:
-            candidate_gt = None
+            candidate_gt, offset_gt = None, None
 
-        return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0], candidates, candidate_gt, gt_xys]
+        return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0],
+                candidates, candidate_gt, offset_gt, gt_xys[-1, :], gt_xys]
 
     def __extract_obj_feat(self, obj_df, norm_center):
         obj_feat_ls = []
         for track_id, obj_sub_df in obj_df.groupby("TRACK_ID"):
-            # skip object with only 2 or less timestamp
-            if obj_sub_df.shape[0] <= 3:
-                continue
-            # if len(obj_df) < self.obs_horizon or is_track_stationary(obj_df):
-            if is_track_stationary(obj_sub_df):     # filter stationary object
+            # skip object with timestamps less than obs_horizon
+            # if obj_sub_df.shape[0] <= self.obs_horizon:
+            #     continue
+            # if is_track_stationary(obj_sub_df):     # filter stationary object
+            if len(obj_sub_df) < self.obs_horizon or is_track_stationary(obj_sub_df):
                 obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
                 continue
 
@@ -229,7 +240,7 @@ class ArgoversePreprocessor(Preprocessor):
             obj_feat_ls.append(
                 [xys, obj_sub_df['OBJECT_TYPE'].iloc[0], ts, track_id]
             )
-        return obj_feat_ls
+        return obj_feat_ls, obj_df
 
     def __extract_lane_feat(self, agent_df, obj_df, norm_center):
         city_name = agent_df["CITY_NAME"].values[0]
@@ -345,18 +356,21 @@ class ArgoversePreprocessor(Preprocessor):
 
 
 if __name__ == "__main__":
-    pth = "/media/Data/autonomous_driving/Argoverse/raw_data"
-    argoverse_processor = ArgoversePreprocessor(pth)
+    root = "/media/Data/autonomous_driving/Argoverse"
+    raw_dir = os.path.join(root, "raw_data")
+    inter_dir = os.path.join(root, "intermediate")
+    argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:
-        pool = Pool(15)
+        pool = Pool(16)
         # todo: multi-thread processing
         for s_name, f_name, df in argoverse_processor.generate():
-            pool.apply_async(func=argoverse_processor.process_and_save, args=(df, s_name, f_name))
+            pool.apply_async(func=argoverse_processor.process_and_save,
+                             args=(df, s_name, f_name, inter_dir))
 
         pool.close()
         pool.join()
-        pool.terminate()
+
     else:
         for s_name, f_name, df in argoverse_processor.generate():
             argoverse_processor.process_and_save(df, s_name, f_name)
