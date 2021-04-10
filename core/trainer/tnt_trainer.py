@@ -101,6 +101,7 @@ class TNTTrainer(Trainer):
         self.model.train()
         return self.iteration(epoch, self.trainset)
 
+    # todo: eval minADE, minFDE
     def eval(self, epoch):
         self.model.eval()
         return self.iteration(epoch, self.evalset)

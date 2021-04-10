@@ -15,6 +15,7 @@ from core.model.layers.scoring_and_selection import TrajScoreSelection, distance
 from core.dataloader.argoverse_loader import Argoverse, GraphData
 
 
+# todo: params initialization
 class TNT(nn.Module):
     def __init__(self,
                  in_channels=8,
@@ -32,9 +33,9 @@ class TNT(nn.Module):
                  score_sel_hid=64,
                  temperature=0.01,
                  k=6,
-                 lambda1=1.0,
+                 lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=1.0,
+                 lambda3=0.1,
                  device=torch.device("cpu")):
         """
         TNT algorithm for trajectory prediction
@@ -109,7 +110,7 @@ class TNT(nn.Module):
         :param data: observed sequence data
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.N, 2)    # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.n, 2).float()    # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]
@@ -117,11 +118,11 @@ class TNT(nn.Module):
 
         # predict the prob. of target candidates and selected the most likely M candidate
         candidate_pro, dx, dy, m_indices = self.target_pred_layer(target_feat, target_candidate)
-        index_offset = torch.arange(0, batch_size).view(batch_size, -1).repeat(1, self.m).view(-1)
+        index_offset = torch.arange(0, batch_size, device=self.device).view(batch_size, -1).repeat(1, self.m).view(-1)
         top_m_indices = m_indices.view(-1) + index_offset * self.n
         m_target_candidate = target_candidate.view(-1, 2)[top_m_indices]
-        m_target_candidate[:, 0] += dx.view(-1)
-        m_target_candidate[:, 1] += dy.view(-1)
+        m_target_candidate[:, 0] += dx.view(-1)[top_m_indices]
+        m_target_candidate[:, 1] += dy.view(-1)[top_m_indices]
         m_target_candidate = m_target_candidate.view(-1, self.m, 2)
 
         # trajectory estimation for the m predicted target location
@@ -132,7 +133,7 @@ class TNT(nn.Module):
 
         return self.traj_selection(traj_pred, score)
 
-    def loss(self, data, reduction="mean"):
+    def loss(self, data, reduction="sum"):
         """
         compute loss according to the gt
         :param data: node feature data
@@ -140,20 +141,20 @@ class TNT(nn.Module):
         :param reduction: reduction method, "mean", "sum" or "batchmean"
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.n, 2)  # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.n, 2).float()   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
-        global_feat, aux_out, aux_gt = self.backbone(data)  # [batch_size, time_step_len, global_graph_width]
+        global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
         target_feat = global_feat[:, 0]
 
         candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
         loss = 0.0
-        if self.with_aux:
+        if self.with_aux and self.training:
             loss += F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
 
         # add the target prediction loss
-        candidate_gt, offset_gt = candidate_gt.view(-1, self.n).float(), offset_gt.view(-1, 2)
+        candidate_gt, offset_gt = candidate_gt.view(-1, self.n).float(), offset_gt.view(-1, 2).float()
         loss += self.lambda1 * self.target_pred_layer.loss(
             target_feat,
             target_candidate,
@@ -194,7 +195,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.5):
+    def traj_selection(self, traj_in, score, threshold=0.2):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -203,15 +204,25 @@ class TNT(nn.Module):
         :return: [batch_size, k, horizon * 2]
         """
         # re-arrange trajectories according the the descending order of the score
-        _, batch_order = score.sort()
-        traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0)
+        _, batch_order = score.sort(descending=True)
+        traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
         traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
 
-        #todo: check the distance between them
-        # traj_cnt = 1
-        # for i in range(1, self.m):
-        #     dis = torch.cat([distance_metric(traj_pred[:, i], traj_selected[:, j]) for j in range(0, traj_cnt)], dim=1)
-        #     if torch.any(dis < threshold)
+        # check the distance between them, NMS
+        for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
+            traj_cnt = 1
+            for i in range(1, self.m):
+                dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, i].unsqueeze(0))
+                if not torch.any(dis < threshold):                       # not exist similar trajectory
+                    traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
+                    traj_cnt += 1
+
+                if traj_cnt >= self.k:
+                    break                                                       # break if collect enough traj
+
+            # no enough traj, pad zero traj
+            if traj_cnt < self.k:
+                traj_selected[:, traj_cnt:] = 0.0
 
         return traj_selected
 
@@ -219,7 +230,7 @@ class TNT(nn.Module):
 if __name__ == "__main__":
     batch_size = 2
     DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
+    TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
 
     dataset = Argoverse(TRAIN_DIR)
@@ -229,11 +240,15 @@ if __name__ == "__main__":
     m = 50
     k = 6
 
-    device = torch.device("cuda:1")
+    device = torch.device("cuda:0")
 
     model = TNT(in_channels=10, n=n, m=m, k=k, device=device).to(device)
     model.train()
 
-    for data in tqdm(data_iter):
-        loss = model.loss(data.to(device))
+    for i, data in enumerate(tqdm(data_iter)):
+        # loss = model.loss(data.to(device))
+        # print("loss dtype:{}".format(loss.dtype))
+        pred = model(data.to(device))
+
+        print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))
 

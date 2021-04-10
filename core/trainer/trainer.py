@@ -184,8 +184,8 @@ class Trainer(object):
             metric_results = get_displacement_errors_and_miss_rate(
                 forecasted_trajectories,
                 gt_trajectories,
-                self.model.max_n_guesses,
-                self.model.pred_len,
+                self.model.k,
+                self.model.horizon,
                 miss_threshold
             )
         if stored_file:

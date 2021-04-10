@@ -56,23 +56,19 @@ class ArgoversePreprocessor(Preprocessor):
     def extract_feature(self, dataframe: pd.DataFrame, map_feat=True):
         # normalize timestamps
         dataframe['TIMESTAMP'] -= np.min(dataframe['TIMESTAMP'].values)
-        dataframe = dataframe.sort_values(by="TIMESTAMP")
 
         # select agent trajectory
-        agent_df, obj_df = None, None
-        for obj_type, sub_dataframe in dataframe.groupby("OBJECT_TYPE"):
-            if obj_type == "AGENT":
-                agent_df = sub_dataframe
-                query_x, query_y = agent_df[['X', 'Y']].values[self.obs_horizon - 1]
-                norm_center = np.array([query_x, query_y])
-                seq_ts = np.unique(agent_df['TIMESTAMP'].values)
+        agent_df = dataframe[dataframe.OBJECT_TYPE == "AGENT"].sort_values(by="TIMESTAMP")
+        norm_center = agent_df[['X', 'Y']].values[self.obs_horizon - 1]
+        seq_ts = np.unique(agent_df['TIMESTAMP'].values)
+
         if not isinstance(agent_df, pd.DataFrame):
             return None, None, None         # return None if no agent in the sequence
-        obj_df = dataframe[dataframe.OBJECT_TYPE != "AGENT"]     # remove "AGENT from dataframe"
+        obj_df = dataframe[dataframe.OBJECT_TYPE != "AGENT"].sort_values(by="TIMESTAMP") # remove "AGENT from dataframe"
         obj_df = obj_df[obj_df['TIMESTAMP'] <= seq_ts[self.obs_horizon-1]]  # remove object record after observation
 
         # include object data within the detection range
-        obj_feats, obj_df = self.__extract_obj_feat(obj_df, norm_center)
+        obj_feats, obj_df = self.__extract_obj_feat(obj_df, agent_df, norm_center)
 
         lane_feats = None
         if map_feat:
@@ -218,21 +214,25 @@ class ArgoversePreprocessor(Preprocessor):
         return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0],
                 candidates, candidate_gt, offset_gt, gt_xys[-1, :], gt_xys]
 
-    def __extract_obj_feat(self, obj_df, norm_center):
+    def __extract_obj_feat(self, obj_df, agnt_df, norm_center):
         obj_feat_ls = []
         for track_id, obj_sub_df in obj_df.groupby("TRACK_ID"):
             # skip object with timestamps less than obs_horizon
-            # if obj_sub_df.shape[0] <= self.obs_horizon:
-            #     continue
-            # if is_track_stationary(obj_sub_df):     # filter stationary object
-            if len(obj_sub_df) < self.obs_horizon or is_track_stationary(obj_sub_df):
+            if len(obj_sub_df) < 10 or is_track_stationary(obj_sub_df):
                 obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
                 continue
 
             xys = obj_sub_df[['X', 'Y']].values
             ts = obj_sub_df["TIMESTAMP"].values
-            # todo: the criteria to determine whether include the object
-            pass        # currently, no filtering
+
+            # check if there exist a ts that the obj is within the detection range of agent
+            agnt_ts = agnt_df["TIMESTAMP"].values
+            ids = np.concatenate([np.where(agnt_ts == t)[0] for t in ts])
+            agnt_xys = agnt_df[['X', 'Y']].values[ids]
+            diff = xys - agnt_xys
+            dis = np.sqrt(np.power(diff[:, 0], 2) + np.power(diff[:, 1], 2))
+            if not np.any(dis <= self.obs_range):
+                continue                            # skip this obj if it is not within the range for one single ts
 
             xys = self.__norm_and_vec__(xys, norm_center)
             ts = (ts[:-1] + ts[1:]) / 2
@@ -245,9 +245,9 @@ class ArgoversePreprocessor(Preprocessor):
     def __extract_lane_feat(self, agent_df, obj_df, norm_center):
         city_name = agent_df["CITY_NAME"].values[0]
         # include traj lane ids
-        lane_ids = self.__get_lane_ids_base_traj(agent_df, self.obs_horizon, self.obs_range)
+        lane_ids = self.__get_lane_ids_base_traj(agent_df, self.obs_range)
         for _, obj_df in obj_df.groupby("TRACK_ID"):
-            ids = self.__get_lane_ids_base_traj(obj_df, self.obs_horizon, self.obs_range)
+            ids = self.__get_lane_ids_base_traj(obj_df, self.obs_range)
             lane_ids = np.hstack((lane_ids, ids))
         lane_ids_array = np.unique(lane_ids)
 
@@ -304,12 +304,11 @@ class ArgoversePreprocessor(Preprocessor):
             halluc_lane_2 = np.vstack((halluc_lane_2, lane_2))
         return halluc_lane_1, halluc_lane_2
 
-    def __get_lane_ids_base_traj(self, traj_df, obs_horizon, lane_radius=20.0):
+    def __get_lane_ids_base_traj(self, traj_df, lane_radius=20.0):
         """
         get corresponding lane ids based on trajectory
         :param am: Argoverse map object
         :param traj_df: DataFrame, trajectory dataframe
-        :param obs_horizon: int, observation horizon(length)
         :param lane_radius: float, the radius to include the lane
         :return:np.array, the related lane ids
         """

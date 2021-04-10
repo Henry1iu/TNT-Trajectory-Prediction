@@ -71,7 +71,6 @@ class TargetPred(nn.Module):
 
         return tar_candit_prob, d_x, d_y, indices
 
-    # todo: offset_gt for every tar_candidate
     def loss(self,
              feat_in: torch.Tensor,
              tar_candidate: torch.Tensor,
@@ -89,23 +88,28 @@ class TargetPred(nn.Module):
         :return:
         """
         batch_size, N, _ = tar_candidate.size()
-        tar_pred_prob, dx, dy, top_m_indices = self.forward(feat_in, tar_candidate)
+
+        # pred prob and compute cls loss
+        feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, N, 1), tar_candidate], dim=2)
+        tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)               # [batch_size, self.N_tar]
+        _, indices = tar_candit_prob.topk(self.M, dim=1)
 
         # select the M output and gt
         index_offset = torch.arange(0, batch_size, device=self.device).view(batch_size, -1).repeat(1, self.M).view(-1)
-        top_m_indices = top_m_indices.view(-1) + index_offset * N
-        tar_pred_prob_selected = F.normalize(tar_pred_prob.view(-1)[top_m_indices].view(batch_size, -1))
+        top_m_indices = indices.view(-1) + index_offset * N
+        tar_pred_prob_selected = F.normalize(tar_candit_prob.view(-1)[top_m_indices].view(batch_size, -1))
         candidate_gt_selected = candidate_gt.view(-1)[top_m_indices].unsqueeze(1).view(batch_size, -1)
 
         # classfication output
-        n_candidate_loss = F.binary_cross_entropy(tar_pred_prob, candidate_gt, reduction=reduction)
+        n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)
         m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
 
-        offset_pred = torch.cat([dx.unsqueeze(2), dy.unsqueeze(2)], dim=2)
-        offset_loss = F.smooth_l1_loss(offset_pred[candidate_gt.bool().unsqueeze(2).repeat(1, 1, 2)].view(-1, 2),
+        # pred offset and compute regression loss
+        feat_in_reg = torch.cat([feat_in, tar_candidate[candidate_gt.bool()]], dim=1)  # [batch_size, feat_dim + 2]
+        tar_offset_mean = self.mean_mlp(feat_in_reg)                            # [batch_size, 2]
+        offset_loss = F.smooth_l1_loss(tar_offset_mean,
                                        offset_gt,
                                        reduction=reduction)
-
         return n_candidate_loss + m_candidate_loss + offset_loss
 
     def inference(self,
@@ -150,8 +154,9 @@ if __name__ == "__main__":
 
     # loss
     print("test loss")
-    candid_gt = torch.randn((batch_size, N))
-    offset_gt = torch.randn((batch_size, N, 2))
+    candid_gt = torch.zeros((batch_size, N), dtype=torch.float)
+    candid_gt[:, 5] = 1.0
+    offset_gt = torch.randn((batch_size, 2))
     loss = layer.loss(feat_tensor, tar_candi_tensor, candid_gt, offset_gt)
 
     # inference

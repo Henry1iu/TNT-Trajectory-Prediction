@@ -24,7 +24,7 @@ class VectorNet(nn.Module):
 
     def __init__(self,
                  in_channels=8,
-                 pred_len=30,
+                 horizon=30,
                  num_subgraph_layres=3,
                  num_global_graph_layer=1,
                  subgraph_width=64,
@@ -36,10 +36,10 @@ class VectorNet(nn.Module):
         # some params
         self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
         self.out_channels = 2
-        self.pred_len = pred_len
+        self.horizon = horizon
         self.subgraph_width = subgraph_width
         self.global_graph_width = global_graph_width
-        self.max_n_guesses = 1
+        self.k = 1
 
         self.device = device
 
@@ -49,15 +49,14 @@ class VectorNet(nn.Module):
         # global graph
         self.global_graph = GlobalGraph(self.polyline_vec_shape,
                                         global_graph_width,
-                                        num_global_layers=num_global_graph_layer,
-                                        device=self.device)
+                                        num_global_layers=num_global_graph_layer)
 
         # pred mlp
         self.traj_pred_mlp = nn.Sequential(
             nn.Linear(global_graph_width, traj_pred_mlp_width),
             nn.LayerNorm(traj_pred_mlp_width),
             nn.ReLU(),
-            nn.Linear(traj_pred_mlp_width, self.pred_len * self.out_channels)
+            nn.Linear(traj_pred_mlp_width, self.horizon * self.out_channels)
         )
 
         # auxiliary recoverey mlp
