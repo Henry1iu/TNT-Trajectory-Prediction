@@ -35,6 +35,8 @@ class Argoverse(Dataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super(Argoverse, self).__init__(root, transform, pre_transform)
 
+        self.data_list = [torch.load(osp.join(self.processed_dir, f_na)) for f_na in self.processed_file_names]
+
     @property
     def raw_file_names(self):
         return [file for file in os.listdir(self.raw_dir) if "features" in file and file.endswith(".pkl")]
@@ -125,11 +127,14 @@ class Argoverse(Dataset):
     def __len__(self):
         return len(self.processed_file_names)
 
+    # def get(self, index: int):
+    #     # [graph_data, gt] = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
+    #     data = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
+    #     # return graph_data, gt
+    #     return data
+
     def get(self, index: int):
-        # [graph_data, gt] = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
-        data = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
-        # return graph_data, gt
-        return data
+        return self.data_list[index]
 
 
 # dataset loader which loads data into memory
@@ -207,9 +212,9 @@ class ArgoverseInMem(InMemoryDataset):
                 valid_len=torch.tensor([valid_len[ind]]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
                 candidate=torch.from_numpy(candidate).float(),
-                candidate_gt=torch.from_numpy(gt_candidate),
-                offset_gt=torch.from_numpy(gt_offset),
-                target_gt=torch.from_numpy(gt_target),
+                candidate_gt=torch.from_numpy(gt_candidate).float(),
+                offset_gt=torch.from_numpy(gt_offset).float(),
+                target_gt=torch.from_numpy(gt_target).float(),
             )
             data_list.append(graph_input)
 
@@ -236,16 +241,16 @@ class ArgoverseInMem(InMemoryDataset):
 
 if __name__ == "__main__":
     # for folder in os.listdir("./data/interm_data"):
-    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
+    # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
     for folder in ["train", "val"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
-        # dataset = Argoverse(dataset_input_path)
-        dataset = ArgoverseInMem(dataset_input_path)
+        dataset = Argoverse(dataset_input_path)
+        # dataset = ArgoverseInMem(dataset_input_path)
         batch_iter = DataLoader(dataset, batch_size=2, num_workers=2, shuffle=True, pin_memory=True)
         for i, data in tqdm(enumerate(batch_iter)):
             # print("{}".format(i))

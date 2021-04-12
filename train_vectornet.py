@@ -54,7 +54,7 @@ def train(args):
     trainer = VectorNetTrainer(
         train_loader=t_loader,
         eval_loader=e_loader,
-        test_laoder=ts_loader,
+        test_loader=ts_loader,
         batch_size=args.batch_size,
         lr=args.lr,
         weight_decay=args.adam_weight_decay,

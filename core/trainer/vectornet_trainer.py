@@ -18,7 +18,7 @@ class VectorNetTrainer(Trainer):
     def __init__(self,
                  train_loader: DataLoader,
                  eval_loader: DataLoader,
-                 test_laoder: DataLoader = None,
+                 test_loader: DataLoader = None,
                  batch_size: int = 1,
                  num_global_graph_layer=1,
                  lr: float = 1e-3,
@@ -38,7 +38,7 @@ class VectorNetTrainer(Trainer):
         trainer class for vectornet
         :param train_loader: see parent class
         :param eval_loader: see parent class
-        :param test_laoder: see parent class
+        :param test_loader: see parent class
         :param lr: see parent class
         :param betas: see parent class
         :param weight_decay: see parent class
@@ -53,7 +53,7 @@ class VectorNetTrainer(Trainer):
         super(VectorNetTrainer, self).__init__(
             train_loader=train_loader,
             eval_loader=eval_loader,
-            test_laoder=test_laoder,
+            test_loader=test_loader,
             batch_size=batch_size,
             lr=lr,
             betas=betas,

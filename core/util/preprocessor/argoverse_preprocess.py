@@ -218,7 +218,7 @@ class ArgoversePreprocessor(Preprocessor):
         obj_feat_ls = []
         for track_id, obj_sub_df in obj_df.groupby("TRACK_ID"):
             # skip object with timestamps less than obs_horizon
-            if len(obj_sub_df) < 10 or is_track_stationary(obj_sub_df):
+            if len(obj_sub_df) < self.obs_horizon or is_track_stationary(obj_sub_df):
                 obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
                 continue
 

@@ -20,7 +20,7 @@ class Trainer(object):
     def __init__(self,
                  train_loader: DataLoader,
                  eval_loader: DataLoader,
-                 test_laoder: DataLoader = None,
+                 test_loader: DataLoader = None,
                  batch_size: int = 1,
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
@@ -35,7 +35,7 @@ class Trainer(object):
         """
         :param train_loader: train dataset dataloader
         :param eval_loader: eval dataset dataloader
-        :param test_laoder: dataset dataloader
+        :param test_loader: dataset dataloader
         :param lr: initial learning rate
         :param betas: Adam optiimzer betas
         :param weight_decay: Adam optimizer weight decay param
@@ -52,7 +52,7 @@ class Trainer(object):
         # dataset
         self.trainset = train_loader
         self.evalset = eval_loader
-        self.testset = test_laoder
+        self.testset = test_loader
         self.batch_size = batch_size
 
         # model
