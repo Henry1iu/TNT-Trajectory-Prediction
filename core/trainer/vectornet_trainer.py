@@ -72,7 +72,7 @@ class VectorNetTrainer(Trainer):
         # model_name = VectorNet
         model_name = OriginalVectorNet
         self.model = model_name(
-            8,
+            10,
             30,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,

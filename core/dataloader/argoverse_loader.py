@@ -35,7 +35,7 @@ class Argoverse(Dataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super(Argoverse, self).__init__(root, transform, pre_transform)
 
-        self.data_list = [torch.load(osp.join(self.processed_dir, f_na)) for f_na in self.processed_file_names]
+        # self.data_list = [torch.load(osp.join(self.processed_dir, f_na)) for f_na in self.processed_file_names]
 
     @property
     def raw_file_names(self):
@@ -75,25 +75,26 @@ class Argoverse(Dataset):
             cluster = poly_feat[:, -1].reshape(-1).astype(np.int32)
             y = raw_data['GT'].values[0].reshape(-1).astype(np.float32)
 
-            candidate = raw_data['CANDIDATES'].values[0]
-            gt_candidate = raw_data['CANDIDATE_GT'].values[0]
-            gt_offset = raw_data['OFFSET_GT'].values[0]
-            gt_target = raw_data['TARGET_GT'].values[0]
+            candidate = raw_data['CANDIDATES'].values[0].astype(np.float32)
+            gt_candidate = raw_data['CANDIDATE_GT'].values[0].astype(np.float32)
+            gt_offset = raw_data['OFFSET_GT'].values[0].astype(np.float32)
+            gt_target = raw_data['TARGET_GT'].values[0].astype(np.float32)
 
             traj_mask, lane_mask = raw_data["TRAJ_ID_TO_MASK"].values[0], raw_data['LANE_ID_TO_MASK'].values[0]
 
             # rearrange x in the sequence of mask
             x_ls = []
             edge_index_ls = []
+            edge_index_start = 0
             for id_, mask_ in traj_mask.items():
                 data_ = poly_feat[mask_[0]:mask_[1]]
-                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], 0)
+                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], edge_index_start)
                 x_ls.append(data_)
                 edge_index_ls.append(edge_index_)
 
             for id_, mask_ in lane_mask.items():
                 data_ = poly_feat[mask_[0]+add_len: mask_[1]+add_len]
-                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], 0)
+                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], edge_index_start)
                 x_ls.append(data_)
                 edge_index_ls.append(edge_index_)
             edge_index = np.hstack(edge_index_ls)
@@ -127,14 +128,14 @@ class Argoverse(Dataset):
     def __len__(self):
         return len(self.processed_file_names)
 
-    # def get(self, index: int):
-    #     # [graph_data, gt] = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
-    #     data = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
-    #     # return graph_data, gt
-    #     return data
-
     def get(self, index: int):
-        return self.data_list[index]
+        # [graph_data, gt] = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
+        data = torch.load(osp.join(self.processed_dir, self.processed_file_names[index]))
+        # return graph_data, gt
+        return data
+
+    # def get(self, index: int):
+    #     return self.data_list[index]
 
 
 # dataset loader which loads data into memory
