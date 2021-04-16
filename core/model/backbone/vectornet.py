@@ -77,14 +77,14 @@ class VectorNetBackbone(nn.Module):
             x[mask_polyline_indices] = 0.0
             x = x.view(-1, time_step_len, self.polyline_vec_shape)
 
-        # TODO: compute the adjacency matrix???
+        # TODO: fill the output of subgraph with correct data rather than create new data for global graph
         # reconstruct the batch global interaction graph data
         if isinstance(data, Batch):
             # mini-batch case
             global_g_data = Batch()
             batch_list = []
             for idx in range(data.num_graphs):
-                node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
+                node_list = torch.tensor([i for i in range(valid_lens[idx])], device=self.device).long()
                 edge_index = torch.combinations(node_list, 2).transpose(1, 0)
 
                 batch_list.append(Data(x=F.normalize(x[idx, :, :], dim=1).squeeze(0),

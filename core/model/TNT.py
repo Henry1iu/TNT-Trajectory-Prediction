@@ -147,11 +147,11 @@ class TNT(nn.Module):
         global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
         target_feat = global_feat[:, 0]
 
-        candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
-
         loss = 0.0
         if self.with_aux and self.training:
             loss += F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
+
+        candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
         # add the target prediction loss
         candidate_gt, offset_gt = candidate_gt.view(-1, self.n).float(), offset_gt.view(-1, 2).float()
@@ -246,9 +246,9 @@ if __name__ == "__main__":
     model.train()
 
     for i, data in enumerate(tqdm(data_iter)):
-        # loss = model.loss(data.to(device))
-        # print("loss dtype:{}".format(loss.dtype))
-        pred = model(data.to(device))
+        loss = model.loss(data.to(device))
+        print("loss dtype:{}".format(loss.dtype))
+        # pred = model(data.to(device))
 
         print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))
 

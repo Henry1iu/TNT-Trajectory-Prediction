@@ -8,7 +8,8 @@ import argparse
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 
-from core.dataloader.dataset import GraphDataset
+# from core.dataloader.dataset import GraphDataset
+from core.dataloader.argoverse_loader import Argoverse, GraphData
 from core.trainer.vectornet_trainer import VectorNetTrainer
 
 TEST = False
@@ -23,9 +24,12 @@ def train(args):
     :return:
     """
     # data loading
-    train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
-    eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-    test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
+    eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+    test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
     loader = DataLoader
     t_loader = loader(train_set[:10] if TEST else train_set,
@@ -93,7 +97,7 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_data",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_with_filter",
                         help="root dir for datasets")
     parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/vectornet/",
                         help="ex)dir to save checkpoint and model")
