@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
+from torch_geometric.nn import DataParallel
 
 from core.trainer.trainer import Trainer
 from core.model.TNT import TNT
@@ -80,18 +81,20 @@ class TNTTrainer(Trainer):
 
         if not model_path:
             if self.multi_gpu:
-                self.model = nn.DataParallel(self.model)
+                self.model = DataParallel(self.model, device_ids=self.cuda_id, output_device=self.cuda_id[0])
                 if self.verbose:
-                    print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
+                    print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
             else:
-                print("[VectorNetTrainer]: Train the mode with single device on {}.".format(self.device))
-            self.model.to(self.device)
+                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
+            self.model = self.model.to(self.device)
         else:
             self.load(model_path, 'm')
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
+        # record the init learning rate
+        self.write_log("LR", self.lr, 0)
 
         # load ckpt
         if ckpt_path:
@@ -122,20 +125,40 @@ class TNTTrainer(Trainer):
         )
 
         for i, data in data_iter:
+            n_graph = data.num_graphs
             if training:
-                loss = self.model.loss(data.to(self.device))
+                if self.multi_gpu:
+                    loss, loss_dict = self.model.module.loss(data.to(self.device))
+                else:
+                    loss, loss_dict = self.model.loss(data.to(self.device))
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
                 self.optim.step()
-                self.write_log("Train Loss", loss.item(), i + epoch * len(dataloader))
+
+                # writing loss
+                self.write_log("Train_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Loss", loss_dict["target_loss"].item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Traj_Loss", loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Score_Loss", loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
-                    loss = self.model.loss(data.to(self.device))
-                    self.write_log("Eval Loss", loss.item(), i + epoch * len(dataloader))
+                    if self.multi_gpu:
+                        loss, loss_dict = self.model.module.loss(data.to(self.device))
+                    else:
+                        loss, loss_dict = self.model.loss(data.to(self.device))
 
-            num_sample += self.batch_size
+                    # writing loss
+                    self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Target_Loss(Eval)",
+                                   loss_dict["target_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Traj_Loss(Eval)",
+                                   loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Score_Loss(Eval)",
+                                   loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
+
+            num_sample += data.num_graphs
             avg_loss += loss.item()
 
             # print log info
@@ -147,11 +170,13 @@ class TNTTrainer(Trainer):
             # data_iter.write(str(log))
             desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
                                                                                  epoch,
-                                                                                 loss.item(),
+                                                                                 loss.item() / n_graph,
                                                                                  avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
-        self.optm_schedule.step_and_update_lr()
+        learning_rate = self.optm_schedule.step_and_update_lr()
+        self.write_log("LR", learning_rate, epoch)
+
         return avg_loss / num_sample
 
     # todo: the inference of the model

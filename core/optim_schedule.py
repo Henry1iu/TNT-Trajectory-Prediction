@@ -17,7 +17,8 @@ class ScheduledOptim:
     def step_and_update_lr(self):
         """Step with the inner optimizer"""
         self.n_current_steps += 1
-        self._update_learning_rate()
+        rate = self._update_learning_rate()
+        return rate
         # self._optimizer.step()
 
     def zero_grad(self):
@@ -34,3 +35,4 @@ class ScheduledOptim:
 
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr
+        return lr

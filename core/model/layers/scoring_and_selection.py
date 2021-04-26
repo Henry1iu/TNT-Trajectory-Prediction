@@ -18,7 +18,7 @@ def distance_metric(traj_candidate: torch.Tensor, traj_gt: torch.Tensor):
         pass
 
     elif traj_candidate.dim() == 2:
-        traj_candidate = traj_candidate.unsqueeze(0)
+        traj_candidate = traj_candidate.unsqueeze(1)
     else:
         raise NotImplementedError
 
@@ -54,11 +54,10 @@ class TrajScoreSelection(nn.Module):
         self.device = device
 
         self.score_mlp = nn.Sequential(
-            nn.Linear(feat_channels + horizon * 2, hidden_dim),
+            nn.Linear(feat_channels + horizon * 2, hidden_dim, bias=False),
             nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Softmax()
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, 1, bias=False)
         )
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
@@ -85,11 +84,18 @@ class TrajScoreSelection(nn.Module):
         """
 
         # compute ground truth score
-        score_gt = F.softmax(distance_metric(traj_in, traj_gt), dim=1)
-        score_pred = self.score_mlp(torch.cat([feat_in, traj_in], dim=1))
+        score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
+        score_pred = self.forward(feat_in, traj_in)
 
-        return F.kl_div(score_pred, score_gt, reduction=reduction) + \
-               F.kl_div(score_pred, torch.ones(score_pred.size(), device=self.device), reduction=reduction)
+        logprobs = - F.log_softmax(score_pred, dim=1)
+        batch = traj_in.shape[0]
+        if reduction == 'mean':
+            loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        else:
+            loss = torch.sum(torch.mul(logprobs, score_gt))
+        return loss
+
+        # return F.kl_div(score_pred, score_gt, reduction=reduction)
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """

@@ -1,7 +1,7 @@
 # trainner to train the models
 
 import os
-from typing import Dict
+from tqdm import tqdm
 
 import json
 
@@ -46,8 +46,8 @@ class Trainer(object):
         :param verbose: whether printing debug messages
         """
         # determine cuda device id
-        self.cuda_id = cuda_device if with_cuda and cuda_device else 0
-        self.device = torch.device("cuda:{}".format(self.cuda_id) if torch.cuda.is_available() and with_cuda else "cpu")
+        self.cuda_id = cuda_device if with_cuda and cuda_device else [0]
+        self.device = torch.device("cuda:{}".format(self.cuda_id[0]) if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
         self.trainset = train_loader
@@ -57,7 +57,7 @@ class Trainer(object):
 
         # model
         self.model = None
-        self.multi_gpu = False
+        self.multi_gpu = False if len(self.cuda_id) == 1 else True
 
         # optimizer params
         self.lr = lr
@@ -169,11 +169,14 @@ class Trainer(object):
         seq_id = 0
         self.model.eval()
         with torch.no_grad():
-            for data in self.testset:
+            for data in tqdm(self.testset):
                 gt = data.y.view(-1, 2).cumsum(axis=0).numpy()
 
                 # inference and transform dimension
-                out = self.model(data.to(self.device))
+                if self.multi_gpu:
+                    out = self.model.module(data.to(self.device))
+                else:
+                    out = self.model(data.to(self.device))
                 pred_y = out.view((-1, 2)).cumsum(axis=0).cpu().numpy()
 
                 # record the prediction and ground truth

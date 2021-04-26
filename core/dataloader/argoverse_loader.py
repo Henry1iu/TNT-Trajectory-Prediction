@@ -62,6 +62,10 @@ class Argoverse(Dataset):
         print("[Argoverse]: The longest valid length is {}.".format(index_to_pad))
         print("[Argoverse]: The mean of valid length is {}.".format(np.mean(valid_len)))
 
+        # construct the edge index of the maximum global graph
+        id_x, id_y = np.triu_indices(index_to_pad)
+        g_graph_edge_index = np.vstack([id_x + 1, id_y + 1])
+
         # pad vectors to the largest polyline id and extend cluster, save the Data to disk
         print("[Argoverse]: Transforming the data to GraphData...")
         for ind, raw_path in enumerate(tqdm(self.raw_paths)):
@@ -101,14 +105,20 @@ class Argoverse(Dataset):
             x = np.vstack(x_ls)
             feature_len = x.shape[1]
             x = np.vstack([x, np.zeros((index_to_pad - cluster.max(), feature_len), dtype=x.dtype)])
-            cluster = np.hstack([cluster, np.arange(cluster.max()+1, index_to_pad+1)])
 
-            # input data
+            # produce the mask of global graph index for this sequence
+            g_graph_mask = (g_graph_edge_index[0, :] <= valid_len[ind]) & (g_graph_edge_index[1, :] <= valid_len[ind])
+
+            cluster = np.hstack([cluster, np.arange(valid_len[ind] + 1, index_to_pad + 1)])
+
+            # subgraph input data
             graph_input = GraphData(
                 x=torch.from_numpy(x),
                 y=torch.from_numpy(y),
                 cluster=torch.from_numpy(cluster),
-                edge_index=torch.from_numpy(edge_index),
+                edge_index=torch.from_numpy(edge_index).long(),
+                g_graph_edge_index=torch.from_numpy(g_graph_edge_index).long(),
+                g_graph_mask=torch.from_numpy(g_graph_mask).bool(),
                 valid_len=torch.tensor([valid_len[ind]]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
                 candidate=torch.from_numpy(candidate).float(),
@@ -246,13 +256,14 @@ if __name__ == "__main__":
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
     for folder in ["train", "val"]:
+    # for folder in ["val"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         dataset = Argoverse(dataset_input_path)
         # dataset = ArgoverseInMem(dataset_input_path)
-        batch_iter = DataLoader(dataset, batch_size=2, num_workers=2, shuffle=True, pin_memory=True)
+        batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=True)
         for i, data in tqdm(enumerate(batch_iter)):
             # print("{}".format(i))
             if i >= 2:

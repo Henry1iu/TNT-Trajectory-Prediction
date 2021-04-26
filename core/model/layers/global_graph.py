@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch_geometric.nn import MessagePassing, max_pool
 from torch_geometric.utils import add_self_loops, degree
 from torch_geometric.data import Data
+from torch_geometric.nn import GATConv
 
 
 class GlobalGraph(nn.Module):
@@ -25,23 +26,33 @@ class GlobalGraph(nn.Module):
         self.global_graph_width = global_graph_width
 
         self.layers = nn.Sequential()
+
+        in_channels = self.in_channels
         for i in range(num_global_layers):
+            # self.layers.add_module(
+            #     f'glp_{i}', SelfAttentionLayer(self.in_channels,
+            #                                    self.global_graph_width,
+            #                                    need_scale,
+            #                                    with_norm)
+            # )
+
             self.layers.add_module(
-                f'glp_{i}', SelfAttentionLayer(self.in_channels,
-                                               self.global_graph_width,
-                                               need_scale,
-                                               with_norm)
+                f'glp_{i}', GATConv(in_channels, self.global_graph_width, add_self_loops=False)
             )
+            in_channels = self.global_graph_width
 
     def forward(self, global_data):
         x, edge_index = global_data.x, global_data.edge_index
         valid_lens, time_step_len = global_data.valid_lens, int(global_data.time_step_len[0])
 
         # print("x size:", x.size())
-        x = x.view(-1, time_step_len, self.in_channels)
+        # x = x.view(-1, time_step_len, self.in_channels)
         for name, layer in self.layers.named_modules():
             if isinstance(layer, SelfAttentionLayer):
                 x = layer(x, edge_index, valid_lens)
+
+            elif isinstance(layer, GATConv):
+                x = layer(x, edge_index)
 
         return x
 
@@ -70,7 +81,7 @@ class SelfAttentionLayer(MessagePassing):
             int(np.sqrt(self.in_channels)) if need_scale else 1
 
     def forward(self, x, edge_index, valid_len):
-        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         # print("x size", x.size())
 
         # attention

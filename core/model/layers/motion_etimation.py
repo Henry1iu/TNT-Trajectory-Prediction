@@ -21,10 +21,11 @@ class MotionEstimation(nn.Module):
         self.hidden_dim = hidden_dim
 
         self.traj_pred = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
+            nn.Linear(in_channels + 2, hidden_dim, bias=False),
+            # nn.BatchNorm1d(hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, horizon * 2)
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, horizon * 2, bias=False)
         )
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
@@ -62,7 +63,7 @@ class MotionEstimation(nn.Module):
         traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
 
         loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction=reduction)
-        return loss, traj_pred
+        return loss
 
     def inference(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """

@@ -28,6 +28,7 @@ def train(args):
     # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
     train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # train_set = Argoverse(pjoin(args.data_root, "val_intermediate")).shuffle()
     eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
     # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
@@ -89,7 +90,7 @@ def train(args):
             # save the model when a lower eval_loss is found
             min_eval_loss = eval_loss
             trainer.save(iter_epoch, min_eval_loss)
-            trainer.save_model()
+            trainer.save_model("{}_epoch".format(iter_epoch))
 
     trainer.save_model("final")
 
@@ -97,9 +98,9 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_data",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_with_filter",
                         help="root dir for datasets")
-    parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/vectornet/",
+    parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/tnt/",
                         help="ex)dir to save checkpoint and model")
 
     parser.add_argument("-l", "--num_glayer", type=int, default=1,
@@ -107,16 +108,16 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--aux_loss", action="store_true", default=False,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=256,
+    parser.add_argument("-b", "--batch_size", type=int, default=32,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
     parser.add_argument("-w", "--num_workers", type=int, default=16,
                         help="dataloader worker size")
 
-    parser.add_argument("-c", "--with_cuda", action="store_true", default=False,
+    parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=None,
+    parser.add_argument("-cd", "--cuda_device", type=int, default=[0, 1], nargs='+',
                         help="CUDA device ids")
     # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
     #                     help="CUDA device ids")

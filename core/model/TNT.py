@@ -103,6 +103,7 @@ class TNT(nn.Module):
             temper=temperature,
             device=self.device
         )
+        self._init_weight()
 
     def forward(self, data):
         """
@@ -117,16 +118,10 @@ class TNT(nn.Module):
         target_feat = global_feat[:, 0]
 
         # predict the prob. of target candidates and selected the most likely M candidate
-        candidate_pro, dx, dy, m_indices = self.target_pred_layer(target_feat, target_candidate)
-        index_offset = torch.arange(0, batch_size, device=self.device).view(batch_size, -1).repeat(1, self.m).view(-1)
-        top_m_indices = m_indices.view(-1) + index_offset * self.n
-        m_target_candidate = target_candidate.view(-1, 2)[top_m_indices]
-        m_target_candidate[:, 0] += dx.view(-1)[top_m_indices]
-        m_target_candidate[:, 1] += dy.view(-1)[top_m_indices]
-        m_target_candidate = m_target_candidate.view(-1, self.m, 2)
+        target_pred, offset_pred = self.target_pred_layer(target_feat, target_candidate)
 
         # trajectory estimation for the m predicted target location
-        traj_pred = self.motion_estimator(target_feat, m_target_candidate)
+        traj_pred = self.motion_estimator(target_feat, target_pred+offset_pred)
 
         # score the predicted trajectory and select the top k trajectory
         score = self.traj_score_layer(target_feat, traj_pred)
@@ -141,7 +136,7 @@ class TNT(nn.Module):
         :param reduction: reduction method, "mean", "sum" or "batchmean"
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.n, 2).float()   # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.n, 2)   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
@@ -149,23 +144,25 @@ class TNT(nn.Module):
 
         loss = 0.0
         if self.with_aux and self.training:
-            loss += F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
+            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
+            loss += aux_loss
 
         candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
         # add the target prediction loss
-        candidate_gt, offset_gt = candidate_gt.view(-1, self.n).float(), offset_gt.view(-1, 2).float()
-        loss += self.lambda1 * self.target_pred_layer.loss(
+        candidate_gt, offset_gt = candidate_gt.view(-1, self.n), offset_gt.view(-1, 2)
+        target_loss = self.target_pred_layer.loss(
             target_feat,
             target_candidate,
             candidate_gt,
             offset_gt,
             reduction=reduction
         )
+        loss += self.lambda1 * target_loss
 
         # add the motion estimation loss
         location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
-        traj_loss, pred_traj = self.motion_estimator.loss(
+        traj_loss = self.motion_estimator.loss(
             target_feat,
             location_gt,
             traj_gt,
@@ -174,14 +171,17 @@ class TNT(nn.Module):
         loss += self.lambda2 * traj_loss
 
         # add the score and selection loss
-        loss += self.lambda3 * self.traj_score_layer.loss(
+        pred_tar, pred_offset = self.target_pred_layer(target_feat, target_candidate)
+        pred_traj = self.motion_estimator(target_feat, pred_tar+pred_offset)
+        score_loss = self.traj_score_layer.loss(
             target_feat,
             pred_traj,
             traj_gt,
             reduction
         )
+        loss += self.lambda3 * score_loss
 
-        return loss
+        return loss, {"target_loss": target_loss, "traj_loss": traj_loss, "score_loss": score_loss}
 
     def inference(self, data):
         raise NotImplementedError
@@ -226,29 +226,43 @@ class TNT(nn.Module):
 
         return traj_selected
 
+    def _init_weight(self):
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.kaiming_normal_(module.weight)
+                # module.weight.data.kaiming_uniform_(module)
+            elif isinstance(module, nn.BatchNorm2d):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
+            elif isinstance(module, nn.LayerNorm):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
+
 
 if __name__ == "__main__":
-    batch_size = 2
+    batch_size = 16
     DATA_DIR = "../../dataset/interm_tnt_with_filter"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
+    # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
 
     dataset = Argoverse(TRAIN_DIR)
-    data_iter = DataLoader(dataset, batch_size=batch_size)
+    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16)
 
     n = 900
     m = 50
     k = 6
 
-    device = torch.device("cuda:0")
+    # device = torch.device("cuda:0")
+    device = torch.device("cpu")
 
-    model = TNT(in_channels=10, n=n, m=m, k=k, device=device).to(device)
+    model = TNT(in_channels=10, n=n, m=m, k=k, with_aux=True, device=device).to(device)
     model.train()
 
     for i, data in enumerate(tqdm(data_iter)):
-        loss = model.loss(data.to(device))
-        print("loss dtype:{}".format(loss.dtype))
-        # pred = model(data.to(device))
+        # loss, _ = model.loss(data.to(device))
+        # print("loss dtype:{}".format(loss.dtype))
 
+        pred = model(data.to(device))
         print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))
 

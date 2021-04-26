@@ -20,18 +20,17 @@ class TargetPred(nn.Module):
         self.device = device
 
         self.prob_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
+            nn.Linear(in_channels + 2, hidden_dim, bias=False),
             nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-            nn.Softmax(dim=2)
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, 1, bias=False)
         )
 
         self.mean_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
+            nn.Linear(in_channels + 2, hidden_dim, bias=False),
             nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 2)
+            nn.LeakyReLU(),
+            nn.Linear(hidden_dim, 2, bias=False)
         )
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor):
@@ -60,16 +59,12 @@ class TargetPred(nn.Module):
         # print("tar_offset_mean size: ", tar_offset_mean.size())
 
         # compute the prob. of normal distribution
-        d_x_dist = Normal(tar_offset_mean[:, :, 0], torch.tensor([1.0], device=self.device))    # [batch_size, self.N_tar]
-        d_y_dist = Normal(tar_offset_mean[:, :, 1], torch.tensor([1.0], device=self.device))    # [batch_size, self.N_tar]
-
-        d_x = d_x_dist.sample()
-        d_y = d_y_dist.sample()
+        offset = torch.normal(tar_offset_mean, std=1.0)
 
         # p = tar_candit_pro * d_x_dist.log_prob(d_x) * d_y_dist.log_prob(d_y)
         _, indices = tar_candit_prob.topk(self.M, dim=1)
-
-        return tar_candit_prob, d_x, d_y, indices
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        return tar_candidate[batch_idx, indices], offset[batch_idx, indices]
 
     def loss(self,
              feat_in: torch.Tensor,
@@ -91,14 +86,13 @@ class TargetPred(nn.Module):
 
         # pred prob and compute cls loss
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, N, 1), tar_candidate], dim=2)
-        tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)               # [batch_size, self.N_tar]
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob).squeeze(-1), dim=-1)               # [batch_size, self.N_tar]
         _, indices = tar_candit_prob.topk(self.M, dim=1)
 
         # select the M output and gt
-        index_offset = torch.arange(0, batch_size, device=self.device).view(batch_size, -1).repeat(1, self.M).view(-1)
-        top_m_indices = indices.view(-1) + index_offset * N
-        tar_pred_prob_selected = F.normalize(tar_candit_prob.view(-1)[top_m_indices].view(batch_size, -1))
-        candidate_gt_selected = candidate_gt.view(-1)[top_m_indices].unsqueeze(1).view(batch_size, -1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        candidate_gt_selected = candidate_gt[batch_idx, indices]
 
         # classfication output
         n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)
@@ -107,10 +101,9 @@ class TargetPred(nn.Module):
         # pred offset and compute regression loss
         feat_in_reg = torch.cat([feat_in, tar_candidate[candidate_gt.bool()]], dim=1)  # [batch_size, feat_dim + 2]
         tar_offset_mean = self.mean_mlp(feat_in_reg)                            # [batch_size, 2]
-        offset_loss = F.smooth_l1_loss(tar_offset_mean,
-                                       offset_gt,
-                                       reduction=reduction)
+        offset_loss = F.smooth_l1_loss(tar_offset_mean, offset_gt, reduction=reduction)
         return n_candidate_loss + m_candidate_loss + offset_loss
+        # return n_candidate_loss + offset_loss
 
     def inference(self,
                   feat_in: torch.Tensor,
@@ -121,19 +114,7 @@ class TargetPred(nn.Module):
         :param tar_candidate: tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
         :return:
         """
-        batch_size, N, _ = tar_candidate.size()
-        # get the prob, dx and dy
-        tar_pred_prob, dx, dy, top_m_indices = self.forward(feat_in, tar_candidate)
-
-        # select the top M candidate
-        index_offset = torch.arange(0, batch_size).view(batch_size, -1).repeat(1, self.M).view(-1)
-        top_m_indices = top_m_indices.view(-1) + index_offset * N
-
-        tar_pred_prob_selected = F.normalize(tar_pred_prob.view(-1)[top_m_indices].view(batch_size, -1))
-        dx_selected = dx.view(-1)[top_m_indices].unsqueeze(1).view(batch_size, -1)
-        dy_selected = dy.view(-1)[top_m_indices].unsqueeze(1).view(batch_size, -1)
-
-        return tar_pred_prob_selected, dx_selected, dy_selected
+        pass
 
 
 if __name__ == "__main__":
@@ -147,10 +128,10 @@ if __name__ == "__main__":
     print("test forward")
     feat_tensor = torch.randn((batch_size, in_channels)).float()
     tar_candi_tensor = torch.randn((batch_size, N, 2)).float()
-    pred, dx, dy, indices = layer(feat_tensor, tar_candi_tensor)
-    print("shape of pred prob: ", pred.size())
-    print("shape of dx and dy: ", dx.size())
-    print("shape of indices: ", indices.size())
+    tar_pred, offset_pred = layer(feat_tensor, tar_candi_tensor)
+    # print("shape of pred prob: ", pred.size())
+    # print("shape of dx and dy: ", dx.size())
+    # print("shape of indices: ", indices.size())
 
     # loss
     print("test loss")
@@ -159,10 +140,10 @@ if __name__ == "__main__":
     offset_gt = torch.randn((batch_size, 2))
     loss = layer.loss(feat_tensor, tar_candi_tensor, candid_gt, offset_gt)
 
-    # inference
-    print("test inference")
-    pred_se, dx_se, dy_se = layer.inference(feat_tensor, tar_candi_tensor)
-    print("shape of pred_se: ", pred_se.size())
-    print("shape of dx, dy: ", dx_se.size())
+    # # inference
+    # print("test inference")
+    # pred_se, dx_se, dy_se = layer.inference(feat_tensor, tar_candi_tensor)
+    # print("shape of pred_se: ", pred_se.size())
+    # print("shape of dx, dy: ", dx_se.size())
 
 
