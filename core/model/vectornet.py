@@ -15,6 +15,9 @@ from torch_geometric.data import DataLoader, DataListLoader, Batch, Data
 from core.model.layers.global_graph import GlobalGraph, SelfAttentionFCLayer
 from core.model.layers.subgraph import SubGraph
 from core.dataloader.dataset import GraphDataset, GraphData
+from core.model.backbone.vectornet import VectorNetBackbone
+from core.loss import VectorLoss
+from core.dataloader.argoverse_loader import Argoverse
 
 
 class VectorNet(nn.Module):
@@ -25,7 +28,7 @@ class VectorNet(nn.Module):
     def __init__(self,
                  in_channels=8,
                  horizon=30,
-                 num_subgraph_layres=3,
+                 num_subgraph_layers=3,
                  num_global_graph_layer=1,
                  subgraph_width=64,
                  global_graph_width=64,
@@ -34,7 +37,7 @@ class VectorNet(nn.Module):
                  device=torch.device("cpu")):
         super(VectorNet, self).__init__()
         # some params
-        self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
+        self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layers)
         self.out_channels = 2
         self.horizon = horizon
         self.subgraph_width = subgraph_width
@@ -42,14 +45,19 @@ class VectorNet(nn.Module):
         self.k = 1
 
         self.device = device
+        self.criterion = VectorLoss(with_aux)
 
         # subgraph feature extractor
-        self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
-
-        # global graph
-        self.global_graph = GlobalGraph(self.polyline_vec_shape,
-                                        global_graph_width,
-                                        num_global_layers=num_global_graph_layer)
+        self.backbone = VectorNetBackbone(
+            in_channels=in_channels,
+            pred_len=horizon,
+            num_subgraph_layres=num_subgraph_layers,
+            subgraph_width=subgraph_width,
+            num_global_graph_layer=num_global_graph_layer,
+            global_graph_width=global_graph_width,
+            with_aux=with_aux,
+            device=device
+        )
 
         # pred mlp
         self.traj_pred_mlp = nn.Sequential(
@@ -58,89 +66,169 @@ class VectorNet(nn.Module):
             nn.ReLU(),
             nn.Linear(traj_pred_mlp_width, self.horizon * self.out_channels)
         )
-
-        # auxiliary recoverey mlp
-        self.with_aux = with_aux
-        if self.with_aux:
-            self.aux_mlp = nn.Sequential(
-                nn.Linear(global_graph_width, traj_pred_mlp_width),
-                nn.LayerNorm(traj_pred_mlp_width),
-                nn.ReLU(),
-                nn.Linear(traj_pred_mlp_width, subgraph_width)
-            )
+        self._init_weight()
 
     def forward(self, data):
         """
         args:
             data (Data): [x, y, cluster, edge_index, valid_len]
         """
-        time_step_len = int(data.time_step_len[0])
-        valid_lens = data.valid_len
+        global_feat, _, _ = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
+        target_feat = global_feat[:, 0]
 
-        # print("valid_lens type:", type(valid_lens).__name__)
-        # print("data batch size:", data.num_batch)
+        pred = self.traj_pred_mlp(target_feat)
 
-        sub_graph_out = self.subgraph(data)
-        x = sub_graph_out.x.view(-1, time_step_len, self.subgraph_width)
+        return pred
 
-        if self.training and self.with_aux:
-            batch_size = x.size()[0]
-            mask_polyline_indices = [random.randint(0, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
-            x = x.view(-1, self.subgraph_width)
-            aux_gt = x[mask_polyline_indices]
-            x[mask_polyline_indices] = 0.0
-            x = x.view(-1, time_step_len, self.subgraph_width)
+    def loss(self, data):
+        global_feat, aux_out, aux_gt = self.backbone(data)
+        target_feat = global_feat[:, 0]
 
-        # TODO: compute the adjacency matrix???
-        # reconstruct the batch global interaction graph data
-        if isinstance(data, Batch):
-            # mini-batch case
-            global_g_data = Batch()
-            batch_list = []
-            for idx in range(data.num_graphs):
-                node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
-                edge_index = torch.combinations(node_list, 2).transpose(1, 0)
+        pred = self.traj_pred_mlp(target_feat)
 
-                batch_list.append(Data(x=F.normalize(x[idx, :, :], dim=1).squeeze(0),
-                                       edge_index=edge_index,
-                                       valid_lens=valid_lens[idx],
-                                       time_step_len=time_step_len))
-            global_g_data = global_g_data.from_data_list(batch_list)
-        elif isinstance(data, Data):
-            # single batch case
-            node_list = torch.tensor([i for i in range(valid_lens[0])]).long()
-            edge_index = torch.combinations(node_list, 2).transpose(1, 0)
-            global_g_data = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
-                                 edge_index=edge_index,
-                                 valid_lens=valid_lens,
-                                 time_step_len=time_step_len)
-        else:
-            raise NotImplementedError
+        y = data.y.view(-1, self.out_channels * self.horizon)
 
-        global_g_data.to(self.device)
-        if self.training:
-            # mask out the features for a random subset of polyline nodes
-            # for one batch, we mask the same polyline features
+        return self.criterion(pred, y)
 
-            global_graph_out = self.global_graph(global_g_data)
-            global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+    def _init_weight(self):
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.kaiming_normal_(module.weight)
+                # module.weight.data.kaiming_uniform_(module)
+            elif isinstance(module, nn.BatchNorm2d):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
+            elif isinstance(module, nn.LayerNorm):
+                module.weight.data.fill_(1)
+                module.bias.data.zero_()
 
-            pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
-            if self.with_aux:
-                aux_in = global_graph_out.view(-1, self.global_graph_width)[mask_polyline_indices]
-                aux_out = self.aux_mlp(aux_in)
-
-                return pred, aux_out, aux_gt
-            else:
-                return pred, None, None
-
-        else:
-            global_graph_out = self.global_graph(global_g_data)
-            global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
-
-            pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
-
-            return pred
+# class VectorNet(nn.Module):
+#     """
+#     hierarchical GNN with trajectory prediction MLP
+#     """
+#
+#     def __init__(self,
+#                  in_channels=8,
+#                  horizon=30,
+#                  num_subgraph_layres=3,
+#                  num_global_graph_layer=1,
+#                  subgraph_width=64,
+#                  global_graph_width=64,
+#                  traj_pred_mlp_width=64,
+#                  with_aux: bool = False,
+#                  device=torch.device("cpu")):
+#         super(VectorNet, self).__init__()
+#         # some params
+#         self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
+#         self.out_channels = 2
+#         self.horizon = horizon
+#         self.subgraph_width = subgraph_width
+#         self.global_graph_width = global_graph_width
+#         self.k = 1
+#
+#         self.device = device
+#
+#         # subgraph feature extractor
+#         self.subgraph = SubGraph(in_channels, num_subgraph_layres, subgraph_width)
+#
+#         # global graph
+#         self.global_graph = GlobalGraph(self.polyline_vec_shape,
+#                                         global_graph_width,
+#                                         num_global_layers=num_global_graph_layer)
+#
+#         # pred mlp
+#         self.traj_pred_mlp = nn.Sequential(
+#             nn.Linear(global_graph_width, traj_pred_mlp_width),
+#             nn.LayerNorm(traj_pred_mlp_width),
+#             nn.ReLU(),
+#             nn.Linear(traj_pred_mlp_width, self.horizon * self.out_channels)
+#         )
+#
+#         # auxiliary recoverey mlp
+#         self.with_aux = with_aux
+#         if self.with_aux:
+#             self.aux_mlp = nn.Sequential(
+#                 nn.Linear(global_graph_width, traj_pred_mlp_width),
+#                 nn.LayerNorm(traj_pred_mlp_width),
+#                 nn.ReLU(),
+#                 nn.Linear(traj_pred_mlp_width, subgraph_width)
+#             )
+#
+#     def forward(self, data):
+#         """
+#         args:
+#             data (Data): [x, y, cluster, edge_index, valid_len]
+#         """
+#         time_step_len = int(data.time_step_len[0])
+#         valid_lens = data.valid_len
+#
+#         # print("valid_lens type:", type(valid_lens).__name__)
+#         # print("data batch size:", data.num_batch)
+#
+#         sub_graph_out = self.subgraph(data)
+#         x = sub_graph_out.x.view(-1, time_step_len, self.subgraph_width)
+#
+#         if self.training and self.with_aux:
+#             batch_size = x.size()[0]
+#             mask_polyline_indices = [random.randint(0, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
+#             x = x.view(-1, self.subgraph_width)
+#             aux_gt = x[mask_polyline_indices]
+#             x[mask_polyline_indices] = 0.0
+#             x = x.view(-1, time_step_len, self.subgraph_width)
+#
+#         # TODO: compute the adjacency matrix???
+#         # reconstruct the batch global interaction graph data
+#         if isinstance(data, Batch):
+#             # mini-batch case
+#             global_g_data = Batch()
+#             batch_list = []
+#             for idx in range(data.num_graphs):
+#                 node_list = torch.tensor([i for i in range(valid_lens[idx])]).long()
+#                 edge_index = torch.combinations(node_list, 2).transpose(1, 0)
+#
+#                 batch_list.append(Data(x=F.normalize(x[idx, :, :], dim=1).squeeze(0),
+#                                        edge_index=edge_index,
+#                                        valid_lens=valid_lens[idx],
+#                                        time_step_len=time_step_len))
+#             global_g_data = global_g_data.from_data_list(batch_list)
+#         elif isinstance(data, Data):
+#             # single batch case
+#             node_list = torch.tensor([i for i in range(valid_lens[0])]).long()
+#             edge_index = torch.combinations(node_list, 2).transpose(1, 0)
+#             global_g_data = Data(x=F.normalize(x[0, :, :], dim=3).squeeze(0),
+#                                  edge_index=edge_index,
+#                                  valid_lens=valid_lens,
+#                                  time_step_len=time_step_len)
+#         else:
+#             raise NotImplementedError
+#
+#         global_g_data.to(self.device)
+#         if self.training:
+#             # mask out the features for a random subset of polyline nodes
+#             # for one batch, we mask the same polyline features
+#
+#             global_graph_out = self.global_graph(global_g_data)
+#             global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+#
+#             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
+#             if self.with_aux:
+#                 aux_in = global_graph_out.view(-1, self.global_graph_width)[mask_polyline_indices]
+#                 aux_out = self.aux_mlp(aux_in)
+#
+#                 return pred, aux_out, aux_gt
+#             else:
+#                 return pred, None, None
+#
+#         else:
+#             global_graph_out = self.global_graph(global_g_data)
+#             global_graph_out = global_graph_out.view(-1, time_step_len, self.polyline_vec_shape)
+#
+#             pred = self.traj_pred_mlp(global_graph_out[:, [0]].squeeze(1))
+#
+#             return pred
+#
+#     def loss(self, data, reduction="sum"):
+#         pass
 
 
 class OriginalVectorNet(nn.Module):
@@ -247,25 +335,36 @@ if __name__ == "__main__":
     decay_lr_factor = 0.9
     decay_lr_every = 10
     lr = 0.005
-    in_channels, pred_len = 8, 30
+    in_channels, pred_len = 10, 30
     show_every = 10
     os.chdir('..')
     # get model
     model = VectorNet(in_channels, pred_len, with_aux=True).to(device)
     # model = OriginalVectorNet(in_channels, pred_len, with_aux=True).to(device)
 
-    DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
-    TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
+    # DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
+    # TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
+    # dataset = GraphDataset(TRAIN_DIR)
 
-    dataset = GraphDataset(TRAIN_DIR)
-    data_iter = DataLoader(dataset[:10], batch_size=batch_size)
+    DATA_DIR = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset/interm_tnt_with_filter/"
+    # TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
+    VAL_DIR = os.path.join(DATA_DIR, 'val_intermediate')
+    dataset = Argoverse(VAL_DIR)
+    data_iter = DataLoader(dataset, batch_size=batch_size)
 
     model.train()
-    for data in data_iter:
-        out, aux_out, mask_feat_gt = model(data)
-        print("Training Pass")
+    for i, data in enumerate(data_iter):
+        # out, aux_out, mask_feat_gt = model(data)
+        loss = model.loss(data.to(device))
+        print("Training Pass! loss: {}".format(loss))
+
+        if i == 2:
+            break
 
     model.eval()
-    for data in data_iter:
-        out = model(data)
-        print("Evaluation Pass")
+    for i, data in enumerate(data_iter):
+        out = model(data.to(device))
+        print("Evaluation Pass! Shape of out: {}".format(out.shape))
+
+        if i == 2:
+            break

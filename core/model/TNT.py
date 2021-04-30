@@ -111,7 +111,7 @@ class TNT(nn.Module):
         :param data: observed sequence data
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.n, 2).float()    # [batch_size, N, 2]
+        target_candidate = data.candidate.view(-1, self.n, 2)    # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]

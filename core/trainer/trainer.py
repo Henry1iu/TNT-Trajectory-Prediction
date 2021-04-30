@@ -177,6 +177,7 @@ class Trainer(object):
                     out = self.model.module(data.to(self.device))
                 else:
                     out = self.model(data.to(self.device))
+                # out = self.model(data.to(self.device))
                 pred_y = out.view((-1, 2)).cumsum(axis=0).cpu().numpy()
 
                 # record the prediction and ground truth
@@ -187,8 +188,8 @@ class Trainer(object):
             metric_results = get_displacement_errors_and_miss_rate(
                 forecasted_trajectories,
                 gt_trajectories,
-                self.model.k,
-                self.model.horizon,
+                self.model.k if not self.multi_gpu else self.model.module.k,
+                self.model.horizon if not self.multi_gpu else self.model.module.horizon,
                 miss_threshold
             )
         if stored_file:

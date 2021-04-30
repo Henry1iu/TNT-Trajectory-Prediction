@@ -89,7 +89,7 @@ def train(args):
             # save the model when a lower eval_loss is found
             min_eval_loss = eval_loss
             trainer.save(iter_epoch, min_eval_loss)
-            trainer.save_model()
+            trainer.save_model("best")
 
     trainer.save_model("final")
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-c", "--with_cuda", action="store_true", default=False,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=None,
+    parser.add_argument("-cd", "--cuda_device", type=int, default=[0, 1], nargs='+',
                         help="CUDA device ids")
     # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
     #                     help="CUDA device ids")

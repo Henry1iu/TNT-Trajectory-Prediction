@@ -63,8 +63,10 @@ class Argoverse(Dataset):
         print("[Argoverse]: The mean of valid length is {}.".format(np.mean(valid_len)))
 
         # construct the edge index of the maximum global graph
-        id_x, id_y = np.triu_indices(index_to_pad)
-        g_graph_edge_index = np.vstack([id_x + 1, id_y + 1])
+        # id_x, id_y = np.triu_indices(index_to_pad)
+        # g_graph_edge_index = np.vstack([id_x + 1, id_y + 1])
+        xx, yy = np.meshgrid([m for m in range(index_to_pad)], [n for n in range(index_to_pad)])
+        g_graph_edge_index = np.vstack([np.concatenate(xx) + 1, np.concatenate(yy) + 1])
 
         # pad vectors to the largest polyline id and extend cluster, save the Data to disk
         print("[Argoverse]: Transforming the data to GraphData...")

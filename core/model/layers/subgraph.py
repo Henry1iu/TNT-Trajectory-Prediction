@@ -66,7 +66,7 @@ class GraphLayerProp(MessagePassing):
         )
 
     def forward(self, x, edge_index):
-        # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
+        edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
 
         if self.verbose:
             print(f'x before mlp: {x}')

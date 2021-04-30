@@ -72,7 +72,7 @@ class TrajScoreSelection(nn.Module):
         batch_size, M, _ = traj_in.size()
         input_tenor = torch.cat([feat_in.unsqueeze(1).repeat(1, M, 1), traj_in], dim=2)
 
-        return self.score_mlp(input_tenor).squeeze(2)
+        return F.softmax(self.score_mlp(input_tenor).squeeze(-1), dim=-1)
 
     def loss(self, feat_in, traj_in, traj_gt, reduction="mean"):
         """
@@ -87,7 +87,7 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        logprobs = - F.log_softmax(score_pred, dim=1)
+        logprobs = - torch.log(score_pred)
         batch = traj_in.shape[0]
         if reduction == 'mean':
             loss = torch.sum(torch.mul(logprobs, score_gt)) / batch

@@ -49,12 +49,11 @@ class TargetPred(nn.Module):
 
         # stack the target candidates to the end of input feature
         feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate.float()], dim=2)
-        # feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate.float()], dim=2)
         # print("feat_in_repeat size: ", feat_in_repeat.size())
 
         # compute probability for each candidate
-        tar_candit_prob = self.prob_mlp(feat_in_repeat).squeeze(-1)          # [batch_size, self.N_tar, 1]
-        tar_offset_mean = self.mean_mlp(feat_in_repeat)                     # [batch_size, self.N_tar, 2]
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat).squeeze(-1), dim=-1)  # [batch_size, self.N_tar, 1]
+        tar_offset_mean = self.mean_mlp(feat_in_repeat)                                 # [batch_size, self.N_tar, 2]
         # print("tar_candit_pro size: ", tar_candit_prob.size())
         # print("tar_offset_mean size: ", tar_offset_mean.size())
 

@@ -90,7 +90,7 @@ def train(args):
             # save the model when a lower eval_loss is found
             min_eval_loss = eval_loss
             trainer.save(iter_epoch, min_eval_loss)
-            trainer.save_model("{}_epoch".format(iter_epoch))
+            trainer.save_model("best")
 
     trainer.save_model("final")
 

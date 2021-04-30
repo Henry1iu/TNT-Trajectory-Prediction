@@ -158,7 +158,7 @@ class TNTTrainer(Trainer):
                     self.write_log("Score_Loss(Eval)",
                                    loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
 
-            num_sample += data.num_graphs
+            num_sample += n_graph
             avg_loss += loss.item()
 
             # print log info

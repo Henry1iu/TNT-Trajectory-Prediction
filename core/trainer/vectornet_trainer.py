@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
+from torch_geometric.nn import DataParallel
 
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
@@ -69,8 +70,8 @@ class VectorNetTrainer(Trainer):
         # init or load model
         self.aux_loss = aux_loss
         # input dim: (20, 8); output dim: (30, 2)
-        # model_name = VectorNet
-        model_name = OriginalVectorNet
+        model_name = VectorNet
+        # model_name = OriginalVectorNet
         self.model = model_name(
             10,
             30,
@@ -81,21 +82,18 @@ class VectorNetTrainer(Trainer):
 
         if not model_path:
             if self.multi_gpu:
-                self.model = nn.DataParallel(self.model)
+                self.model = DataParallel(self.model)
                 if self.verbose:
-                    print("[VectorNetTrainer]: Train the mode with multiple GPUs.")
+                    print("[VectorNetTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
             else:
                 print("[VectorNetTrainer]: Train the mode with single device on {}.".format(self.device))
-            self.model.to(self.device)
+            self.model = self.model.to(self.device)
         else:
             self.load(model_path, 'm')
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
-
-        # loss function
-        self.criterion = VectorLoss(aux_loss=aux_loss)
 
         # load ckpt
         if ckpt_path:
@@ -125,14 +123,12 @@ class VectorNetTrainer(Trainer):
         )
 
         for i, data in data_iter:
+            n_graph = data.num_graphs
             if training:
-                pred, aux_out, aux_gt = self.model(data.to(self.device))
-                loss = self.criterion(
-                    pred,
-                    data.y.view(-1, self.model.out_channels * self.model.pred_len),
-                    aux_out,
-                    aux_gt
-                )
+                if self.multi_gpu:
+                    loss = self.model.module.loss(data.to(self.device))
+                else:
+                    loss = self.model.loss(data.to(self.device))
 
                 self.optm_schedule.zero_grad()
                 loss.backward()
@@ -141,28 +137,25 @@ class VectorNetTrainer(Trainer):
 
             else:
                 with torch.no_grad():
-                    pred = self.model(data.to(self.device))
-                    loss = self.criterion(pred,
-                                          data.y.view(-1, self.model.out_channels * self.model.pred_len))
+                    if self.multi_gpu:
+                        loss = self.model.module.loss(data.to(self.device))
+                    else:
+                        loss = self.model.loss(data.to(self.device))
                     self.write_log("Eval Loss", loss.item(), i + epoch * len(dataloader))
 
-            num_sample += self.batch_size
+            num_sample += n_graph
             avg_loss += loss.item()
 
             # print log info
-            # log = {
-            #     "iter": i,
-            #     "loss": loss.item(),
-            #     "avg_loss": avg_loss / num_sample
-            # }
-            # data_iter.write(str(log))
             desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
                                                                                  epoch,
-                                                                                 loss.item(),
+                                                                                 loss.item() / n_graph,
                                                                                  avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
-        self.optm_schedule.step_and_update_lr()
+        learning_rate = self.optm_schedule.step_and_update_lr()
+        self.write_log("LR", learning_rate, epoch)
+
         return avg_loss / num_sample
 
     # todo: the inference of the model
