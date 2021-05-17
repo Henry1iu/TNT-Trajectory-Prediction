@@ -61,7 +61,7 @@ class VectorNetBackbone(nn.Module):
             data (Data): [x, y, cluster, edge_index, valid_len]
         """
         time_step_len = int(data.time_step_len[0])
-        # valid_lens = data.valid_len
+        valid_lens = data.valid_len
 
         # print("valid_lens type:", type(valid_lens).__name__)
         # print("data batch size:", data.num_batch)
@@ -79,21 +79,24 @@ class VectorNetBackbone(nn.Module):
         sub_graph_out.valid_lens = data.valid_len
         sub_graph_out.time_step_len = data.time_step_len
         sub_graph_out.x = F.normalize(sub_graph_out.x, dim=0)
-        # edge_index = torch.empty((2, 0), device=self.device, dtype=torch.long)
-        # if isinstance(data, Batch):
-        #     # mini-batch case
-        #     for idx in range(data.num_graphs):
-        #         node_list = torch.tensor([i for i in range(idx * time_step_len, idx * time_step_len + valid_lens[idx])],
-        #                                  device=self.device).long()
-        #         edge_index = torch.cat([edge_index, torch.combinations(node_list, 2).transpose(1, 0)], dim=1)
-        #
-        # elif isinstance(data, Data):
-        #     # single batch case
-        #     node_list = torch.tensor([i for i in range(valid_lens[0])], device=self.device).long()
-        #     edge_index = torch.cat([edge_index, torch.combinations(node_list, 2).transpose(1, 0)], dim=1)
-        # else:
-        #     raise NotImplementedError
-        sub_graph_out.edge_index = data.g_graph_edge_index[:, data.g_graph_mask]
+
+        edge_index = torch.empty((2, 0), device=self.device, dtype=torch.long)
+        if isinstance(data, Batch):
+            # mini-batch case
+            for idx in range(data.num_graphs):
+                node_list = torch.tensor([i for i in range(idx * time_step_len, idx * time_step_len + valid_lens[idx])],
+                                         device=self.device).long()
+                xx, yy = torch.meshgrid(node_list, node_list)
+                edge_index = torch.hstack([edge_index, torch.vstack([xx.reshape(-1), yy.reshape(-1)])])
+
+        elif isinstance(data, Data):
+            # single batch case
+            node_list = torch.tensor([i for i in range(valid_lens[0])], device=self.device).long()
+            xx, yy = torch.meshgrid(node_list, node_list)
+            edge_index = torch.vstack([xx.reshape(-1), yy.reshape(-1)])
+        else:
+            raise NotImplementedError
+        sub_graph_out.edge_index = edge_index
 
         if self.training:
             # mask out the features for a random subset of polyline nodes

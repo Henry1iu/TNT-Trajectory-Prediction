@@ -97,12 +97,41 @@ class Preprocessor(object):
         :param rate: the sampling rate (num. of samples)
         return rate^2 candidate samples
         """
-        x = np.linspace(-rate, rate, 30) * (sampling_range / rate)
+        x = np.linspace(-sampling_range, sampling_range, rate)
         return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
 
     # todo: uniform sampling along he land
-    # @staticmethod
-    # def lane_candidate_sampling():
+    @staticmethod
+    def lane_candidate_sampling(centerlines, n):
+        """
+        get sampling on the input centerlines
+        :param centerlines: np.array[lines, :]
+        :param n: the number of candiates
+        """
+        n_segment = centerlines.shape[0] - 1
+
+        rate = n // n_segment
+        n_mod = n % n_segment
+
+        candidates = []
+        if rate > 0:
+            for i in range(n_segment):
+                if i < n_mod:       # the rate is acturally rate + 1
+                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
+                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
+                    candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate + 1)])
+                else:               # the rate is rate
+                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / rate
+                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / rate
+                    candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate)])
+            assert len(candidates) == n, "[Preprocessor]: The number of generated candidates are not {}".format(n)
+        else:
+            for i in range(n_segment):
+                if i < n_mod:       # the rate is acturally rate + 1
+                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
+                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
+                    candidates.extend([[centerlines[i, 0] + dx / 2, centerlines[i, 1] + dy / 2]])
+        return np.array(candidates)
 
     @staticmethod
     def get_candidate_gt(target_candidate, gt_target):
@@ -113,6 +142,7 @@ class Preprocessor(object):
         """
         displacement = gt_target - target_candidate
         gt_index = np.argmin(np.power(displacement[:, 0], 2) + np.power(displacement[:, 1], 2))
+
         onehot = np.zeros((target_candidate.shape[0], 1))
         onehot[gt_index] = 1
 

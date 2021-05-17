@@ -12,7 +12,7 @@ from core.model.layers.target_prediction import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
 from core.model.layers.scoring_and_selection import TrajScoreSelection, distance_metric
 
-from core.dataloader.argoverse_loader import Argoverse, GraphData
+from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
 
 
 # todo: params initialization
@@ -26,7 +26,7 @@ class TNT(nn.Module):
                  global_graph_width=64,
                  with_aux=False,
                  aux_width=64,
-                 n=900,
+                 n=1000,
                  target_pred_hid=64,
                  m=50,
                  motion_esti_hid=64,
@@ -88,6 +88,7 @@ class TNT(nn.Module):
         self.target_pred_layer = TargetPred(
             in_channels=global_graph_width,
             hidden_dim=target_pred_hid,
+            n=n,
             m=m,
             device=device
         )
@@ -195,7 +196,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.2):
+    def traj_selection(self, traj_in, score, threshold=0.01):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -240,29 +241,29 @@ class TNT(nn.Module):
 
 
 if __name__ == "__main__":
-    batch_size = 16
-    DATA_DIR = "../../dataset/interm_tnt_with_filter"
+    batch_size = 256
+    # DATA_DIR = "../../dataset/interm_tnt_with_filter"
+    DATA_DIR = "../../dataset/interm_tnt_n_s"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
 
-    dataset = Argoverse(TRAIN_DIR)
-    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16)
+    dataset = ArgoverseInMem(TRAIN_DIR)
+    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16, pin_memory=True)
 
-    n = 900
+    n = 1000
     m = 50
     k = 6
 
-    # device = torch.device("cuda:0")
-    device = torch.device("cpu")
+    device = torch.device("cuda:1")
+    # device = torch.device("cpu")
 
     model = TNT(in_channels=10, n=n, m=m, k=k, with_aux=True, device=device).to(device)
     model.train()
 
     for i, data in enumerate(tqdm(data_iter)):
-        # loss, _ = model.loss(data.to(device))
+        loss, _ = model.loss(data.to(device))
         # print("loss dtype:{}".format(loss.dtype))
 
-        pred = model(data.to(device))
-        print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))
-
+        # pred = model(data.to(device))
+        # print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))

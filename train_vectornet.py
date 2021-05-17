@@ -8,7 +8,7 @@ import argparse
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 
-# from core.dataloader.dataset import GraphDataset
+from core.dataloader.dataset import GraphDataset
 from core.dataloader.argoverse_loader import Argoverse, GraphData
 from core.trainer.vectornet_trainer import VectorNetTrainer
 

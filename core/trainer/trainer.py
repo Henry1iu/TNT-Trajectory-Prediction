@@ -167,6 +167,10 @@ class Trainer(object):
 
         forecasted_trajectories, gt_trajectories = {}, {}
         seq_id = 0
+
+        k = self.model.k if not self.multi_gpu else self.model.module.k
+        horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+
         self.model.eval()
         with torch.no_grad():
             for data in tqdm(self.testset):
@@ -178,18 +182,19 @@ class Trainer(object):
                 else:
                     out = self.model(data.to(self.device))
                 # out = self.model(data.to(self.device))
-                pred_y = out.view((-1, 2)).cumsum(axis=0).cpu().numpy()
+                dim_out = len(out.shape)
+                pred_y = out.unsqueeze(dim_out).squeeze(0).view((k, horizon, 2)).cumsum(axis=1).cpu().numpy()
 
                 # record the prediction and ground truth
-                forecasted_trajectories[seq_id] = [pred_y]
+                forecasted_trajectories[seq_id] = [pred_y_k for pred_y_k in pred_y]
                 gt_trajectories[seq_id] = gt
                 seq_id += 1
 
             metric_results = get_displacement_errors_and_miss_rate(
                 forecasted_trajectories,
                 gt_trajectories,
-                self.model.k if not self.multi_gpu else self.model.module.k,
-                self.model.horizon if not self.multi_gpu else self.model.module.horizon,
+                k,
+                horizon,
                 miss_threshold
             )
         if stored_file:

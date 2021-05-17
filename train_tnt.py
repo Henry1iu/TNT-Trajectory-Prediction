@@ -8,7 +8,8 @@ import argparse
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
 
-from core.dataloader.argoverse_loader import Argoverse, GraphData
+from core.dataloader.dataset import GraphDataset
+from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
 from core.trainer.tnt_trainer import TNTTrainer
 
 TEST = False
@@ -23,14 +24,17 @@ def train(args):
     :return:
     """
     # data loading
+    # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+
     # train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # train_set = Argoverse(pjoin(args.data_root, "val_intermediate")).shuffle()
     # eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
     # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
-    train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
-    # train_set = Argoverse(pjoin(args.data_root, "val_intermediate")).shuffle()
-    eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
-    # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+    train_set = ArgoverseInMem(pjoin(args.data_root, "train_intermediate")).shuffle()
+    eval_set = ArgoverseInMem(pjoin(args.data_root, "val_intermediate"))
 
     loader = DataLoader
     t_loader = loader(train_set[:10] if TEST else train_set,
@@ -98,17 +102,17 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_with_filter",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s",
                         help="root dir for datasets")
     parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/tnt/",
                         help="ex)dir to save checkpoint and model")
 
     parser.add_argument("-l", "--num_glayer", type=int, default=1,
                         help="number of global graph layers")
-    parser.add_argument("-a", "--aux_loss", action="store_true", default=False,
+    parser.add_argument("-a", "--aux_loss", action="store_true", default=True,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=32,
+    parser.add_argument("-b", "--batch_size", type=int, default=256,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
@@ -117,7 +121,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=[0, 1], nargs='+',
+    parser.add_argument("-cd", "--cuda_device", type=int, default=[1, 0], nargs='+',
                         help="CUDA device ids")
     # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
     #                     help="CUDA device ids")
@@ -125,7 +129,7 @@ if __name__ == "__main__":
                         help="printing loss every n iter: setting n")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
+    parser.add_argument("--lr", type=float, default=3e-3, help="learning rate of adam")
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")

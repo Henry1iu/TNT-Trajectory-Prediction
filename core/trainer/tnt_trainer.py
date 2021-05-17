@@ -81,7 +81,7 @@ class TNTTrainer(Trainer):
 
         if not model_path:
             if self.multi_gpu:
-                self.model = DataParallel(self.model, device_ids=self.cuda_id, output_device=self.cuda_id[0])
+                self.model = DataParallel(self.model)
                 if self.verbose:
                     print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
             else:
@@ -104,7 +104,6 @@ class TNTTrainer(Trainer):
         self.model.train()
         return self.iteration(epoch, self.trainset)
 
-    # todo: eval minADE, minFDE
     def eval(self, epoch):
         self.model.eval()
         return self.iteration(epoch, self.evalset)

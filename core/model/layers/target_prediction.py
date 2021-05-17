@@ -10,27 +10,29 @@ class TargetPred(nn.Module):
                  in_channels: int,
                  hidden_dim: int = 64,
                  m: int = 50,
+                 n: int = 1000,
                  device=torch.device("cpu")):
         """"""
         super(TargetPred, self).__init__()
         self.in_channels = in_channels
         self.hidden_dim = hidden_dim
+        self.N = n          # input candidates
         self.M = m          # output candidate target
 
         self.device = device
 
         self.prob_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim, bias=False),
+            nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 1, bias=False)
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_dim, 1)
         )
 
         self.mean_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim, bias=False),
+            nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 2, bias=False)
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_dim, 2)
         )
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor):
@@ -45,14 +47,14 @@ class TargetPred(nn.Module):
 
         feat_in = feat_in.unsqueeze(1)
         batch_size, _, _ = feat_in.size()
-        _, N, _ = tar_candidate.size()
+        # print("tar_candidate size: {}".format(tar_candidate.size()))
 
         # stack the target candidates to the end of input feature
-        feat_in_repeat = torch.cat([feat_in.repeat(1, N, 1), tar_candidate.float()], dim=2)
+        feat_in_repeat = torch.cat([feat_in.repeat(1, self.N, 1), tar_candidate.float()], dim=2)
         # print("feat_in_repeat size: ", feat_in_repeat.size())
 
         # compute probability for each candidate
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat).squeeze(-1), dim=-1)  # [batch_size, self.N_tar, 1]
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat), dim=1).squeeze(-1)  # [batch_size, self.N_tar, 1]
         tar_offset_mean = self.mean_mlp(feat_in_repeat)                                 # [batch_size, self.N_tar, 2]
         # print("tar_candit_pro size: ", tar_candit_prob.size())
         # print("tar_offset_mean size: ", tar_offset_mean.size())
@@ -81,28 +83,30 @@ class TargetPred(nn.Module):
         :param reduction: the reduction to apply to the loss output
         :return:
         """
-        batch_size, N, _ = tar_candidate.size()
+        batch_size, _, _ = tar_candidate.size()
 
         # pred prob and compute cls loss
-        feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, N, 1), tar_candidate], dim=2)
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob).squeeze(-1), dim=-1)               # [batch_size, self.N_tar]
+        feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, self.N, 1), tar_candidate], dim=2)
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, self.N_tar]
+        # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)       # [batch_size, self.N_tar]
         _, indices = tar_candit_prob.topk(self.M, dim=1)
 
         # select the M output and gt
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
         candidate_gt_selected = candidate_gt[batch_idx, indices]
 
         # classfication output
         n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)
-        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
+        # m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
 
         # pred offset and compute regression loss
         feat_in_reg = torch.cat([feat_in, tar_candidate[candidate_gt.bool()]], dim=1)  # [batch_size, feat_dim + 2]
         tar_offset_mean = self.mean_mlp(feat_in_reg)                            # [batch_size, 2]
         offset_loss = F.smooth_l1_loss(tar_offset_mean, offset_gt, reduction=reduction)
-        return n_candidate_loss + m_candidate_loss + offset_loss
-        # return n_candidate_loss + offset_loss
+        # return n_candidate_loss + m_candidate_loss + offset_loss
+        return n_candidate_loss + offset_loss
 
     def inference(self,
                   feat_in: torch.Tensor,

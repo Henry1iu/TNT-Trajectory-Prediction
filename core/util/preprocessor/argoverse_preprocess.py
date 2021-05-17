@@ -7,7 +7,8 @@ from os.path import join as pjoin
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-from multiprocessing.dummy import Pool
+import warnings
+from concurrent.futures import ThreadPoolExecutor
 
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
@@ -164,7 +165,9 @@ class ArgoversePreprocessor(Preprocessor):
                 assert _tmp_len_1 == _tmp_len_2, f"left, right lane vector length contradict"
 
             # FIXME: handling `nan` in lane_nd
-            col_mean = np.nanmean(lane_nd, axis=0)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                col_mean = np.nanmean(lane_nd, axis=0)
             if np.isnan(col_mean).any():
                 lane_nd[:, 2].fill(.0)
                 lane_nd[:, 5].fill(.0)
@@ -196,13 +199,14 @@ class ArgoversePreprocessor(Preprocessor):
 
     def __extract_agent_feat(self, agent_df, norm_center):
         xys, gt_xys = agent_df[["X", "Y"]].values[:self.obs_horizon], agent_df[["X", "Y"]].values[self.obs_horizon:]
-        xys = self.__norm_and_vec__(xys, norm_center)
+        xys_norm = self.__norm_and_vec__(xys, norm_center)
 
         ts = agent_df['TIMESTAMP'].values[:self.obs_horizon]
         ts = (ts[:-1] + ts[1:]) / 2
 
-        candidates = self.uniform_candidate_sampling(50)
+        candidates = self.__get_candidate_sampling(agent_df)
         gt_xys -= norm_center  # normalize to last observed timestamp point of agent
+        candidates -= norm_center
 
         # handle the gt
         if len(gt_xys) > 0:
@@ -211,7 +215,7 @@ class ArgoversePreprocessor(Preprocessor):
         else:
             candidate_gt, offset_gt = None, None
 
-        return [xys, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0],
+        return [xys_norm, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0],
                 candidates, candidate_gt, offset_gt, gt_xys[-1, :], gt_xys]
 
     def __extract_obj_feat(self, obj_df, agnt_df, norm_center):
@@ -245,9 +249,11 @@ class ArgoversePreprocessor(Preprocessor):
     def __extract_lane_feat(self, agent_df, obj_df, norm_center):
         city_name = agent_df["CITY_NAME"].values[0]
         # include traj lane ids
-        lane_ids = self.__get_lane_ids_base_traj(agent_df, self.obs_range)
+        # lane_ids = self.__get_lane_ids_base_traj(agent_df, self.obs_range)
+        lane_ids = self.__get_lane_ids_base_traj(agent_df)
         for _, obj_df in obj_df.groupby("TRACK_ID"):
-            ids = self.__get_lane_ids_base_traj(obj_df, self.obs_range)
+            # ids = self.__get_lane_ids_base_traj(obj_df, self.obs_range)
+            ids = self.__get_lane_ids_base_traj(obj_df)
             lane_ids = np.hstack((lane_ids, ids))
         lane_ids_array = np.unique(lane_ids)
 
@@ -304,32 +310,73 @@ class ArgoversePreprocessor(Preprocessor):
             halluc_lane_2 = np.vstack((halluc_lane_2, lane_2))
         return halluc_lane_1, halluc_lane_2
 
-    def __get_lane_ids_base_traj(self, traj_df, lane_radius=20.0):
+    # def __get_lane_ids_base_traj(self, traj_df, lane_radius=20.0):
+    #     """
+    #     get corresponding lane ids based on trajectory
+    #     :param traj_df: DataFrame, trajectory dataframe
+    #     :param lane_radius: float, the radius to include the lane
+    #     :return: np.array, the related lane ids
+    #     """
+    #     # todo: change the get lane ids method to fit varaible traj length
+    #     # get lane ids at the start
+    #     traj_len = traj_df.shape[0]
+    #
+    #     city_name = traj_df["CITY_NAME"].values[0]
+    #     query_x, query_y = traj_df[['X', 'Y']].values[0]
+    #     lane_ids_str = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+    #
+    #     # get lane ids in the middle
+    #     query_x, query_y = traj_df[['X', 'Y']].values[int(traj_len / 2)]
+    #     lane_ids_mid = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+    #
+    #     # get lane ids at the end
+    #     query_x, query_y = traj_df[['X', 'Y']].values[-1]
+    #     lane_ids_end = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+    #
+    #     # merge all the lane ids and remove duplicate
+    #     return np.unique(lane_ids_str + lane_ids_mid + lane_ids_end)
+
+    def __get_lane_ids_base_traj(self, traj_df):
         """
-        get corresponding lane ids based on trajectory
-        :param am: Argoverse map object
+        get corresponding lane ids based on trajectory, calling argoverse api
         :param traj_df: DataFrame, trajectory dataframe
-        :param lane_radius: float, the radius to include the lane
-        :return:np.array, the related lane ids
+        :return: np.array, the ralated lane ids
         """
-        # todo: change the get lane ids method to fit varaible traj length
-        # get lane ids at the start
-        traj_len = traj_df.shape[0]
-
         city_name = traj_df["CITY_NAME"].values[0]
-        query_x, query_y = traj_df[['X', 'Y']].values[0]
-        lane_ids_str = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+        try:
+            xy = traj_df[['X', 'Y']].values[:self.obs_horizon]
+        except:
+            xy = traj_df[['X', 'Y']].values
 
-        # get lane ids in the middle
-        query_x, query_y = traj_df[['X', 'Y']].values[int(traj_len / 2)]
-        lane_ids_mid = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+        _, lane_seg_list = self.map.get_candidate_centerlines_for_traj(xy, city_name=city_name)
+        lane_ids = []
+        for lane_seg in lane_seg_list:
+            lane_ids.extend(lane_seg)
+        return np.unique(lane_ids)
 
-        # get lane ids at the end
-        query_x, query_y = traj_df[['X', 'Y']].values[-1]
-        lane_ids_end = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
+    def __get_candidate_sampling(self, agent_df, n=1000):
+        # get the agent lane ids
+        ids = self.__get_lane_ids_base_traj(agent_df)
 
-        # merge all the lane ids and remove duplicate
-        return np.unique(lane_ids_str + lane_ids_mid + lane_ids_end)
+        # get the centerlines
+        city_name = agent_df["CITY_NAME"].values[0]
+        centerline_list = []
+        centerline_cnt = 0
+        for idx in ids:
+            centerlines = self.map.get_lane_segment_centerline(idx, city_name=city_name)
+            centerline_cnt += centerlines.shape[0] - 1
+            centerline_list.append(centerlines)
+
+        # assign the number of sampling in each centerline
+        candidates = np.empty((0, 2))
+        for i, centerlines in enumerate(centerline_list):
+            if i == len(centerline_list) - 1:
+                candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n - candidates.shape[0])])
+            else:
+                n_sub = int(n * (centerlines.shape[0] - 1) / centerline_cnt)
+                candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n_sub)])
+        assert candidates.shape[0] == n, "[ArgoversePreprocessor]: The number of generated candidates are not {}".format(n)
+        return candidates
 
     @staticmethod
     def __trans_gt_offset_format(gt):
@@ -357,21 +404,17 @@ class ArgoversePreprocessor(Preprocessor):
 if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
-    inter_dir = os.path.join(root, "intermediate")
+    # inter_dir = os.path.join(root, "intermediate")
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s"
     argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:
-        pool = Pool(16)
-        # todo: multi-thread processing
-        for s_name, f_name, df in argoverse_processor.generate():
-            pool.apply_async(func=argoverse_processor.process_and_save,
-                             args=(df, s_name, f_name, inter_dir))
-
-        pool.close()
-        pool.join()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            for s_name, f_name, df in argoverse_processor.generate():
+                executor.submit(argoverse_processor.process_and_save, df, s_name, f_name, interm_dir)
 
     else:
         for s_name, f_name, df in argoverse_processor.generate():
-            argoverse_processor.process_and_save(df, s_name, f_name)
+            argoverse_processor.process_and_save(df, s_name, f_name, interm_dir)
 
 

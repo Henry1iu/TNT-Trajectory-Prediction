@@ -13,6 +13,8 @@ import torch
 from core.util.config import DATA_DIR, LANE_RADIUS, OBJ_RADIUS, OBS_LEN, INTERMEDIATE_DATA_DIR
 from tqdm import tqdm
 
+PREDICT_HORIZON = 30
+
 
 def get_fc_edge_index(num_nodes, start=0):
     """
@@ -145,20 +147,62 @@ class GraphDataset(InMemoryDataset):
         data, slices = self.collate(g_ls)
         torch.save((data, slices), self.processed_paths[0])
 
+    def get(self, idx):
+        data = super(GraphDataset, self).get(idx)
+        y = data.y.reshape(PREDICT_HORIZON, 2)
+
+        # compute the final target gt
+        final_target = y.sum(dim=0)
+
+        # generate classification candidate and gt
+        x = np.linspace(-120, 120, 60)
+        candidates = np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
+        diff = candidates - final_target.numpy()
+        rms = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
+        gt_idx = np.argmin(rms)
+        candit_gt = np.zeros((candidates.shape[0], 1))
+        candit_gt[gt_idx] = 1
+
+        # generate offset gt
+        offset_gt = final_target.numpy() - candidates[gt_idx]
+
+        return GraphData(
+            x=data.x,
+            y=data.y,
+            cluster=data.cluster,
+            edge_index=data.edge_index,
+            valid_len=data.valid_len,
+            time_step_len=data.time_step_len,
+            candidate=torch.from_numpy(candidates).float(),
+            candidate_gt=torch.from_numpy(candit_gt).float(),
+            offset_gt=torch.from_numpy(offset_gt).float(),
+            target_gt=final_target.float()
+        )
+
 
 # %%
 if __name__ == "__main__":
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset/interm_tnt_with_filter"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data"
 
-    for folder in ["train", "val", "test_obs"]:
+    # for folder in ["train", "val", "test_obs"]:
+    for folder in ["train"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
+        batch_size = 256
         dataset = GraphDataset(dataset_input_path).shuffle()
-        batch_iter = DataLoader(dataset, batch_size=2, num_workers=2, shuffle=True, pin_memory=True)
-        for i, data in tqdm(enumerate(batch_iter)):
-            # print("{}".format(i))
-            continue
+        batch_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16, shuffle=True, pin_memory=True)
+        print("length of dataset: {}.".format(dataset.len()))
+        final_offset = []
+        for data in tqdm(batch_iter):
+            # print(data.y.shape)
+            final_offset.append(data.y.reshape(PREDICT_HORIZON * data.num_graphs, 2).sum(dim=0).numpy())
+
+        final_offset = np.array(final_offset)
+        print("The min of the final offset: {}".format(np.min(final_offset, axis=0)))
+        print("The max of the final offset: {}".format(np.max(final_offset, axis=0)))
+        print("The mean of the final offset: {}".format(np.mean(final_offset, axis=0)))
+        print("The std of the final offset: {}".format(np.std(final_offset, axis=0)))
 # %%

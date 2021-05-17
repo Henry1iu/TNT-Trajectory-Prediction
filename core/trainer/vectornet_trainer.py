@@ -9,7 +9,6 @@ from torch_geometric.nn import DataParallel
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
-from core.loss import VectorLoss
 
 
 class VectorNetTrainer(Trainer):

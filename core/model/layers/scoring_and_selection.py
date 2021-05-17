@@ -54,10 +54,10 @@ class TrajScoreSelection(nn.Module):
         self.device = device
 
         self.score_mlp = nn.Sequential(
-            nn.Linear(feat_channels + horizon * 2, hidden_dim, bias=False),
+            nn.Linear(feat_channels + horizon * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, 1, bias=False)
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_dim, 1)
         )
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):

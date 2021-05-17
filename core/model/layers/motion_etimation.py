@@ -21,11 +21,10 @@ class MotionEstimation(nn.Module):
         self.hidden_dim = hidden_dim
 
         self.traj_pred = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim, bias=False),
-            # nn.BatchNorm1d(hidden_dim),
+            nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(),
-            nn.Linear(hidden_dim, horizon * 2, bias=False)
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_dim, horizon * 2)
         )
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
