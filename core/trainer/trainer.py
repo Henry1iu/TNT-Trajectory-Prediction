@@ -18,10 +18,12 @@ class Trainer(object):
     Parent class for all the trainer class
     """
     def __init__(self,
-                 train_loader: DataLoader,
-                 eval_loader: DataLoader,
-                 test_loader: DataLoader = None,
+                 trainset,
+                 evalset,
+                 testset,
+                 loader=DataLoader,
                  batch_size: int = 1,
+                 num_workers: int = 1,
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
@@ -33,9 +35,9 @@ class Trainer(object):
                  verbose: bool = True
                  ):
         """
-        :param train_loader: train dataset dataloader
-        :param eval_loader: eval dataset dataloader
-        :param test_loader: dataset dataloader
+        :param train_loader: train dataset
+        :param eval_loader: eval dataset
+        :param test_loader: dataset
         :param lr: initial learning rate
         :param betas: Adam optiimzer betas
         :param weight_decay: Adam optimizer weight decay param
@@ -50,10 +52,20 @@ class Trainer(object):
         self.device = torch.device("cuda:{}".format(self.cuda_id[0]) if torch.cuda.is_available() and with_cuda else "cpu")
 
         # dataset
-        self.trainset = train_loader
-        self.evalset = eval_loader
-        self.testset = test_loader
+        self.trainset = trainset
+        self.evalset = evalset
+        self.testset = testset
         self.batch_size = batch_size
+
+        self.train_loader = loader(
+            self.trainset,
+            batch_size=self.batch_size,
+            num_workers=num_workers,
+            pin_memory=True,
+            shuffle=True
+        )
+        self.eval_loader = loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        self.test_loader = loader(self.testset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
 
         # model
         self.model = None
@@ -78,10 +90,12 @@ class Trainer(object):
         self.verbose = verbose
 
     def train(self, epoch):
-        raise NotImplementedError
+        self.model.train()
+        return self.iteration(epoch, self.train_loader)
 
     def eval(self, epoch):
-        raise NotImplementedError
+        self.model.eval()
+        return self.iteration(epoch, self.eval_loader)
 
     def test(self, data):
         raise NotImplementedError
@@ -173,22 +187,23 @@ class Trainer(object):
 
         self.model.eval()
         with torch.no_grad():
-            for data in tqdm(self.testset):
-                gt = data.y.view(-1, 2).cumsum(axis=0).numpy()
+            for data in tqdm(self.test_loader):
+                batch_size = data.num_graphs
+                gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1).numpy()
 
                 # inference and transform dimension
                 if self.multi_gpu:
                     out = self.model.module(data.to(self.device))
                 else:
                     out = self.model(data.to(self.device))
-                # out = self.model(data.to(self.device))
                 dim_out = len(out.shape)
-                pred_y = out.unsqueeze(dim_out).squeeze(0).view((k, horizon, 2)).cumsum(axis=1).cpu().numpy()
+                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
 
                 # record the prediction and ground truth
-                forecasted_trajectories[seq_id] = [pred_y_k for pred_y_k in pred_y]
-                gt_trajectories[seq_id] = gt
-                seq_id += 1
+                for batch_id in range(batch_size):
+                    forecasted_trajectories[seq_id] = [pred_y_k for pred_y_k in pred_y[batch_id]]
+                    gt_trajectories[seq_id] = gt[batch_id]
+                    seq_id += 1
 
             metric_results = get_displacement_errors_and_miss_rate(
                 forecasted_trajectories,

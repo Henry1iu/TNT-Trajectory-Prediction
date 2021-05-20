@@ -89,13 +89,13 @@ class TargetPred(nn.Module):
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, self.N, 1), tar_candidate], dim=2)
         tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, self.N_tar]
         # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)       # [batch_size, self.N_tar]
-        _, indices = tar_candit_prob.topk(self.M, dim=1)
+        # _, indices = tar_candit_prob.topk(self.M, dim=1)
 
         # select the M output and gt
-        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        # batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
         # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
-        tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
-        candidate_gt_selected = candidate_gt[batch_idx, indices]
+        # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
+        # candidate_gt_selected = candidate_gt[batch_idx, indices]
 
         # classfication output
         n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)

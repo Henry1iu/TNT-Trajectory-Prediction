@@ -16,11 +16,13 @@ class VectorNetTrainer(Trainer):
     VectorNetTrainer, train the vectornet with specified hyperparameters and configurations
     """
     def __init__(self,
-                 train_loader: DataLoader,
-                 eval_loader: DataLoader,
-                 test_loader: DataLoader = None,
+                 trainset,
+                 evalset,
+                 testset,
                  batch_size: int = 1,
+                 num_workers: int = 1,
                  num_global_graph_layer=1,
+                 horizon: int = 30,
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
@@ -51,10 +53,11 @@ class VectorNetTrainer(Trainer):
         :param verbose: see parent class
         """
         super(VectorNetTrainer, self).__init__(
-            train_loader=train_loader,
-            eval_loader=eval_loader,
-            test_loader=test_loader,
+            trainset=trainset,
+            evalset=evalset,
+            testset=testset,
             batch_size=batch_size,
+            num_workers=num_workers,
             lr=lr,
             betas=betas,
             weight_decay=weight_decay,
@@ -72,8 +75,8 @@ class VectorNetTrainer(Trainer):
         model_name = VectorNet
         # model_name = OriginalVectorNet
         self.model = model_name(
-            10,
-            30,
+            self.trainset.num_features,
+            horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
             device=self.device

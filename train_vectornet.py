@@ -29,22 +29,21 @@ def train(args):
     # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
     train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
     eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
-    test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
-    loader = DataLoader
-    t_loader = loader(train_set[:10] if TEST else train_set,
-                      batch_size=args.batch_size,
-                      num_workers=args.num_workers,
-                      pin_memory=True,
-                      shuffle=True)
-    e_loader = loader(eval_set[:2] if TEST else eval_set,
-                      batch_size=args.batch_size,
-                      num_workers=args.num_workers,
-                      pin_memory=True)
-    ts_loader = loader(test_set[:1] if TEST else test_set,
-                       batch_size=1,
-                       num_workers=1,
-                       pin_memory=True)
+    # loader = DataLoader
+    # t_loader = loader(train_set[:10] if TEST else train_set,
+    #                   batch_size=args.batch_size,
+    #                   num_workers=args.num_workers,
+    #                   pin_memory=True,
+    #                   shuffle=True)
+    # e_loader = loader(eval_set[:2] if TEST else eval_set,
+    #                   batch_size=args.batch_size,
+    #                   num_workers=args.num_workers,
+    #                   pin_memory=True)
+    # ts_loader = loader(test_set[:1] if TEST else test_set,
+    #                    batch_size=1,
+    #                    num_workers=1,
+    #                    pin_memory=True)
 
     # init output dir
     time_stamp = datetime.now().strftime("%m-%d-%H-%M")
@@ -56,10 +55,11 @@ def train(args):
 
     # init trainer
     trainer = VectorNetTrainer(
-        train_loader=t_loader,
-        eval_loader=e_loader,
-        test_loader=ts_loader,
+        trainset=train_set,
+        evalset=eval_set,
+        testset=eval_set,
         batch_size=args.batch_size,
+        num_workers=args.num_workers,
         lr=args.lr,
         weight_decay=args.adam_weight_decay,
         betas=(args.adam_beta1, args.adam_beta2),

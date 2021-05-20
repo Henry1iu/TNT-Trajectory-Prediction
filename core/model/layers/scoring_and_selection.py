@@ -27,9 +27,9 @@ def distance_metric(traj_candidate: torch.Tensor, traj_gt: torch.Tensor):
     _, M, horizon_2_times = traj_candidate.size()
     dis = torch.pow(traj_candidate - traj_gt.unsqueeze(1), 2).view(-1, M, int(horizon_2_times / 2), 2)
 
-    dis, _ = torch.max(torch.sum(dis, dim=3), dim=2, keepdim=True)
+    dis, _ = torch.max(torch.sum(dis, dim=3), dim=2)
 
-    return dis.squeeze(2)
+    return dis
 
 
 class TrajScoreSelection(nn.Module):
@@ -87,15 +87,15 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        logprobs = - torch.log(score_pred)
-        batch = traj_in.shape[0]
-        if reduction == 'mean':
-            loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
-        else:
-            loss = torch.sum(torch.mul(logprobs, score_gt))
-        return loss
+        # logprobs = - torch.log(score_pred)
+        # batch = traj_in.shape[0]
+        # if reduction == 'mean':
+        #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        # else:
+        #     loss = torch.sum(torch.mul(logprobs, score_gt))
+        # return loss
 
-        # return F.kl_div(score_pred, score_gt, reduction=reduction)
+        return F.kl_div(score_pred, score_gt, reduction=reduction)
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """

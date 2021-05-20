@@ -16,11 +16,13 @@ class TNTTrainer(Trainer):
     VectorNetTrainer, train the vectornet with specified hyperparameters and configurations
     """
     def __init__(self,
-                 train_loader: DataLoader,
-                 eval_loader: DataLoader,
-                 test_loader: DataLoader = None,
+                 trainset,
+                 evalset,
+                 testset,
                  batch_size: int = 1,
+                 num_workers: int = 1,
                  num_global_graph_layer=1,
+                 horizon: int = 30,
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
@@ -51,10 +53,11 @@ class TNTTrainer(Trainer):
         :param verbose: see parent class
         """
         super(TNTTrainer, self).__init__(
-            train_loader=train_loader,
-            eval_loader=eval_loader,
-            test_loader=test_loader,
+            trainset=trainset,
+            evalset=evalset,
+            testset=testset,
             batch_size=batch_size,
+            num_workers=num_workers,
             lr=lr,
             betas=betas,
             weight_decay=weight_decay,
@@ -72,8 +75,8 @@ class TNTTrainer(Trainer):
         # model_name = VectorNet
         model_name = TNT
         self.model = model_name(
-            10,
-            30,
+            self.trainset.num_features,
+            horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
             device=self.device
@@ -99,14 +102,6 @@ class TNTTrainer(Trainer):
         # load ckpt
         if ckpt_path:
             self.load(ckpt_path, 'c')
-
-    def train(self, epoch):
-        self.model.train()
-        return self.iteration(epoch, self.trainset)
-
-    def eval(self, epoch):
-        self.model.eval()
-        return self.iteration(epoch, self.evalset)
 
     def iteration(self, epoch, dataloader):
         training = self.model.training
@@ -173,8 +168,9 @@ class TNTTrainer(Trainer):
                                                                                  avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
-        learning_rate = self.optm_schedule.step_and_update_lr()
-        self.write_log("LR", learning_rate, epoch)
+        if training:
+            learning_rate = self.optm_schedule.step_and_update_lr()
+            self.write_log("LR", learning_rate, epoch)
 
         return avg_loss / num_sample
 

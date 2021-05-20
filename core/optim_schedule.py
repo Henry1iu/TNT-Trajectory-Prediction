@@ -7,11 +7,12 @@ class ScheduledOptim:
     """ A simple wrapper class for learning rate scheduling
     """
 
-    def __init__(self, optimizer, init_lr, n_warmup_epoch=15, decay_rate=0.9):
+    def __init__(self, optimizer, init_lr, n_warmup_epoch=30, update_rate=5, decay_rate=0.9):
         self._optimizer = optimizer
         self.n_warmup_epoch = n_warmup_epoch
         self.n_current_steps = 0
         self.init_lr = init_lr
+        self.update_rate = update_rate
         self.decay_rate = decay_rate
 
     def step_and_update_lr(self):
@@ -26,7 +27,7 @@ class ScheduledOptim:
         self._optimizer.zero_grad()
 
     def _get_lr_scale(self):
-        return np.power(self.decay_rate, max(self.n_current_steps - self.n_warmup_epoch, 0))
+        return np.power(self.decay_rate, max((self.n_current_steps - self.n_warmup_epoch) // self.update_rate + 1, 0))
 
     def _update_learning_rate(self):
         """ Learning rate scheduling per step """
