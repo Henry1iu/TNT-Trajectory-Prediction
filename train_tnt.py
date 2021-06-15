@@ -69,19 +69,19 @@ def train(args):
         lr=args.lr,
         weight_decay=args.adam_weight_decay,
         betas=(args.adam_beta1, args.adam_beta2),
+        lr_update_freq=args.lr_update_freq,
+        lr_decay_rate=args.lr_decay_rate,
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
         cuda_device=args.cuda_device,
         save_folder=output_dir,
-        log_freq=args.log_freq
+        log_freq=args.log_freq,
+        ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
+        model_path=args.resume_model if hasattr(args, "resume_model") and args.resume_model else None
     )
 
-    # resume checkpoint or model if available
-    if hasattr(args, "resume_checkpoint") and args.resume_checkpoint:
-        trainer.load(args.resume_checkpoint, 'c')
-    elif hasattr(args, "resume_model") and args.resume_model:
-        trainer.load(args.resume_model, 'm')
+    # resume minimum eval loss
     min_eval_loss = trainer.min_eval_loss
 
     # training
@@ -94,6 +94,7 @@ def train(args):
         elif eval_loss < min_eval_loss:
             # save the model when a lower eval_loss is found
             min_eval_loss = eval_loss
+
             trainer.save(iter_epoch, min_eval_loss)
             trainer.save_model("best")
 
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--aux_loss", action="store_true", default=True,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=256,
+    parser.add_argument("-b", "--batch_size", type=int, default=1,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
@@ -134,8 +135,13 @@ if __name__ == "__main__":
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
+    parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
+                        help="learning rate decay frequency for lr scheduler")
+    parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")
 
-    parser.add_argument("-rc", "--resume_checkpoint", type=str, help="resume a checkpoint for fine-tune")
+    parser.add_argument("-rc", "--resume_checkpoint", type=str,
+                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
+                        help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str, help="resume a model state for fine-tune")
 
     args = parser.parse_args()

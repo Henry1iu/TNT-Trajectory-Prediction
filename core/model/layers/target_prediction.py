@@ -89,13 +89,6 @@ class TargetPred(nn.Module):
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, self.N, 1), tar_candidate], dim=2)
         tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, self.N_tar]
         # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)       # [batch_size, self.N_tar]
-        # _, indices = tar_candit_prob.topk(self.M, dim=1)
-
-        # select the M output and gt
-        # batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
-        # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
-        # candidate_gt_selected = candidate_gt[batch_idx, indices]
 
         # classfication output
         n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)
@@ -106,6 +99,34 @@ class TargetPred(nn.Module):
         tar_offset_mean = self.mean_mlp(feat_in_reg)                            # [batch_size, 2]
         offset_loss = F.smooth_l1_loss(tar_offset_mean, offset_gt, reduction=reduction)
         # return n_candidate_loss + m_candidate_loss + offset_loss
+
+        # ====================================== DEBUG ====================================== #
+        # # select the M output and check corresponding gt
+        # _, indices = tar_candit_prob.topk(self.M, dim=1)
+        # batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        # tar_pred_selected = tar_candidate[batch_idx, indices]
+        # candidate_gt_selected = candidate_gt[batch_idx, indices]
+        #
+        # tar_candit_prob_cpu = tar_pred_prob_selected.detach().cpu().numpy()
+        # candidate_gt_cpu = candidate_gt_selected.detach().cpu().numpy()
+        #
+        # print("\n[DEBUG]: tar_pred_prob_selected: \n{};\n[DEBUG]: candidate_gt_selected: \n{};".format(tar_candit_prob_cpu,
+        #                                                                                                candidate_gt_cpu))
+        # print("[DEBUG]: tar_pred_selected: \n{};\n[DEBUG]: tar_gt: \n{};".format(tar_pred_selected.detach().cpu().numpy(),
+        #                                                                          tar_candidate[candidate_gt.bool()].detach().cpu().numpy()))
+        # # check offset
+        # tar_offset_mean_cpu = tar_offset_mean.detach().cpu().numpy()
+        # offset_gt_cpu = offset_gt.detach().cpu().numpy()
+        # print("[DEBUG]: tar_offset_mean: {};\n[DEBUG]: offset_gt: {};".format(tar_offset_mean_cpu, offset_gt_cpu))
+        #
+        # # check destination
+        # dst_gt = tar_candidate[candidate_gt.bool()] + offset_gt
+        # offset = torch.normal(self.mean_mlp(feat_in_prob), std=1.0)[batch_idx, indices]
+        # dst_pred = tar_pred_selected + offset
+        # print("[DEBUG]: dst_pred: \n{};\n[DEBUG]: dst_gt: \n{};".format(dst_pred.detach().cpu().numpy(),
+        #                                                                 dst_gt.detach().cpu().numpy()))
+        # ====================================== DEBUG ====================================== #
         return n_candidate_loss + offset_loss
 
     def inference(self,

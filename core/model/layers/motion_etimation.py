@@ -62,6 +62,12 @@ class MotionEstimation(nn.Module):
         traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
 
         loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction=reduction)
+
+        # ====================================== DEBUG ====================================== #
+        # print("[DEBUG]: traj_pred: \n{};".format(traj_pred.detach().cpu().numpy()))
+        # print("[DEBUG]: traj_gt: \n{};".format(traj_gt.detach().cpu().numpy()))
+        # print("[DEBUG]: difference: \n{};".format((traj_pred - traj_gt).detach().cpu().numpy()))
+        # ====================================== DEBUG ====================================== #
         return loss
 
     def inference(self, feat_in: torch.Tensor, loc_in: torch.Tensor):

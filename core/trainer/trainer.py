@@ -82,6 +82,7 @@ class Trainer(object):
         # criterion and metric
         self.criterion = None
         self.min_eval_loss = None
+        self.best_metric = None
 
         # log
         self.save_folder = save_folder
@@ -130,20 +131,34 @@ class Trainer(object):
     def save_model(self, prefix=""):
         """
         save current state of the model
-        :param save_folder: str, the folder to store the model file
+        :param prefix: str, the prefix to the model file
         :return:
         """
         if not os.path.exists(self.save_folder):
             os.makedirs(self.save_folder, exist_ok=True)
+
+        # compute the metrics and save
+        metric = self.compute_metric()
+
+        # skip model saving if the minADE is not better
+        if self.best_metric and isinstance(metric, dict):
+            if metric["minADE"] >= self.best_metric["minADE"]:
+                print("[Trainer]: Best minADE: {}; Current minADE: {}; Skip model saving...".format(self.best_metric["minADE"], metric["minADE"]))
+                return
+
+        # save best metric
+        self.best_metric = metric
+        metric_stored_file = os.path.join(self.save_folder, "{}_metrics.txt".format(prefix))
+        with open(metric_stored_file, 'w+') as f:
+            f.write(json.dumps(self.best_metric))
+
+        # save model
         torch.save(
             self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
             os.path.join(self.save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
         if self.verbose:
             print("[Trainer]: Saving model to {}...".format(self.save_folder))
-
-        # compute the metrics and save
-        _ = self.compute_metric(stored_file=os.path.join(self.save_folder, "{}_metrics.txt".format(prefix)))
 
     def load(self, load_path, mode='c'):
         """
@@ -156,7 +171,10 @@ class Trainer(object):
             # load ckpt
             ckpt = torch.load(load_path)
             try:
-                self.model.load_state_dict(ckpt["model_state_dict"])
+                if self.multi_gpu:
+                    self.model.module.load_state_dict(ckpt["model_state_dict"])
+                else:
+                    self.model.load_state_dict(ckpt["model_state_dict"])
                 self.optim.load_state_dict(ckpt["optimizer_state_dict"])
                 self.min_eval_loss = ckpt["min_eval_loss"]
             except:
@@ -169,11 +187,10 @@ class Trainer(object):
         else:
             raise NotImplementedError
 
-    def compute_metric(self, miss_threshold=2.0, stored_file=None):
+    def compute_metric(self, miss_threshold=2.0):
         """
         compute metric for test dataset
         :param miss_threshold: float,
-        :param stored_file: str, store the result metric in the file
         :return:
         """
         assert self.model, "[Trainer]: No valid model, metrics can't be computed!"
@@ -212,8 +229,4 @@ class Trainer(object):
                 horizon,
                 miss_threshold
             )
-        if stored_file:
-            with open(stored_file, 'w+') as f:
-                assert isinstance(metric_results, dict), "[Trainer] The metric evaluation result is not valid!"
-                f.write(json.dumps(metric_results))
         return metric_results

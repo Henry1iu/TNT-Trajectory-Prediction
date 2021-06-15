@@ -26,7 +26,9 @@ class TNTTrainer(Trainer):
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=15,
+                 warmup_epoch=10,
+                 lr_update_freq=5,
+                 lr_decay_rate=0.3,
                  aux_loss: bool = False,
                  with_cuda: bool = False,
                  cuda_device=None,
@@ -82,24 +84,33 @@ class TNTTrainer(Trainer):
             device=self.device
         )
 
-        if not model_path:
+        # resume from model file or maintain the original
+        if model_path:
+            self.load(model_path, 'm')
+        else:
+            # multi-gpu training or not
             if self.multi_gpu:
                 self.model = DataParallel(self.model)
                 if self.verbose:
                     print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
             else:
-                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
+                if self.verbose:
+                    print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
             self.model = self.model.to(self.device)
-        else:
-            self.load(model_path, 'm')
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
-        self.optm_schedule = ScheduledOptim(self.optim, self.lr, n_warmup_epoch=self.warmup_epoch)
+        self.optm_schedule = ScheduledOptim(
+            self.optim,
+            self.lr,
+            n_warmup_epoch=self.warmup_epoch,
+            update_rate=lr_update_freq,
+            decay_rate=lr_decay_rate
+        )
         # record the init learning rate
         self.write_log("LR", self.lr, 0)
 
-        # load ckpt
+        # resume training from ckpt
         if ckpt_path:
             self.load(ckpt_path, 'c')
 

@@ -27,6 +27,7 @@ def train(args):
     # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
     # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
     # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+
     train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
     eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
 
@@ -68,14 +69,12 @@ def train(args):
         with_cuda=args.with_cuda,
         cuda_device=args.cuda_device,
         save_folder=output_dir,
-        log_freq=args.log_freq
+        log_freq=args.log_freq,
+        ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
+        model_path=args.resume_model if hasattr(args, "resume_model") and args.resume_model else None
     )
 
-    # resume checkpoint or model if available
-    if hasattr(args, "resume_checkpoint") and args.resume_checkpoint:
-        trainer.load(args.resume_checkpoint, 'c')
-    elif hasattr(args, "resume_model") and args.resume_model:
-        trainer.load(args.resume_model, 'm')
+    # resume minimum eval loss
     min_eval_loss = trainer.min_eval_loss
 
     # training
