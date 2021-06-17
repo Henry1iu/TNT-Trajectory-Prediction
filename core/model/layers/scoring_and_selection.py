@@ -57,6 +57,9 @@ class TrajScoreSelection(nn.Module):
             nn.Linear(feat_channels + horizon * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.LeakyReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
 
@@ -87,15 +90,14 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        # logprobs = - torch.log(score_pred)
-        # batch = traj_in.shape[0]
-        # if reduction == 'mean':
-        #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
-        # else:
-        #     loss = torch.sum(torch.mul(logprobs, score_gt))
-        # return loss
-
-        return F.kl_div(score_pred, score_gt, reduction=reduction)
+        logprobs = - torch.log(score_pred)
+        batch = traj_in.shape[0]
+        if reduction == 'mean':
+            loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        else:
+            loss = torch.sum(torch.mul(logprobs, score_gt))
+        return loss
+        # return F.kl_div(score_pred, score_gt, reduction=reduction)
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """

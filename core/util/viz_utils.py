@@ -3,8 +3,9 @@
 # @Time    : 2020-05-27 15:00
 # @Author  : Xiaoke Huang
 # @Email   : xiaokehuang@foxmail.com
-from argoverse_loader.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
-from argoverse_loader.map_representation.map_api import ArgoverseMap
+from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
+from argoverse.map_representation.map_api import ArgoverseMap
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd

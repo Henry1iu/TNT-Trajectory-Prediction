@@ -137,7 +137,7 @@ class TNT(nn.Module):
         compute loss according to the gt
         :param data: node feature data
         :param gt: ground truth data
-        :param reduction: reduction method, "mean", "sum" or "batchmean"
+        :param reduction: reduction method, "mean", "sum"
         :return:
         """
         target_candidate = data.candidate.view(-1, self.n, 2)   # [batch_size, N, 2]

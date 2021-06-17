@@ -25,6 +25,9 @@ class TargetPred(nn.Module):
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.LeakyReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
 
@@ -32,6 +35,9 @@ class TargetPred(nn.Module):
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.LeakyReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, 2)
         )
 

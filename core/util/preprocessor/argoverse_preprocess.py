@@ -20,7 +20,7 @@ DEBUG = True
 
 
 class ArgoversePreprocessor(Preprocessor):
-    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=30):
+    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=50):
         super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range)
 
         self.obs_horizon = obs_horizon
@@ -63,21 +63,28 @@ class ArgoversePreprocessor(Preprocessor):
         norm_center = agent_df[['X', 'Y']].values[self.obs_horizon - 1]
         seq_ts = np.unique(agent_df['TIMESTAMP'].values)
 
+        # compute the norm vector
+        vec_start = agent_df[['X', 'Y']].values[(self.obs_horizon-4): (self.obs_horizon - 1)]
+        vec_end = agent_df[['X', 'Y']].values[(self.obs_horizon-3): self.obs_horizon]
+        norm_vector = vec_end - vec_start               # [3, 2]
+        norm_vector = np.mean(norm_vector, axis=0)
+        norm_vector /= np.sqrt(norm_vector[0] ** 2 + norm_vector[1] ** 2)
+
         if not isinstance(agent_df, pd.DataFrame):
             return None, None, None         # return None if no agent in the sequence
         obj_df = dataframe[dataframe.OBJECT_TYPE != "AGENT"].sort_values(by="TIMESTAMP") # remove "AGENT from dataframe"
         obj_df = obj_df[obj_df['TIMESTAMP'] <= seq_ts[self.obs_horizon-1]]  # remove object record after observation
 
         # include object data within the detection range
-        obj_feats, obj_df = self.__extract_obj_feat(obj_df, agent_df, norm_center)
+        obj_feats, obj_df = self.__extract_obj_feat(obj_df, agent_df, norm_center, norm_vector)
 
         lane_feats = None
         if map_feat:
             # include lane data within the detection range
-            lane_feats = self.__extract_lane_feat(agent_df, obj_df, norm_center)
+            lane_feats = self.__extract_lane_feat(agent_df, obj_df, norm_center, norm_vector)
 
         # extract the feature for the agent traj
-        agent_feats = self.__extract_agent_feat(agent_df, norm_center)
+        agent_feats = self.__extract_agent_feat(agent_df, norm_center, norm_vector)
 
         return agent_feats, obj_feats, lane_feats
 
@@ -197,7 +204,7 @@ class ArgoversePreprocessor(Preprocessor):
                      "TRAJ_ID_TO_MASK", "LANE_ID_TO_MASK", "TARJ_LEN", "LANE_LEN"]
         )
 
-    def __extract_agent_feat(self, agent_df, norm_center):
+    def __extract_agent_feat(self, agent_df, norm_center, norm_vector):
         xys, gt_xys = agent_df[["X", "Y"]].values[:self.obs_horizon], agent_df[["X", "Y"]].values[self.obs_horizon:]
         xys_norm = self.__norm_and_vec__(xys, norm_center)
 
@@ -207,6 +214,11 @@ class ArgoversePreprocessor(Preprocessor):
         candidates = self.__get_candidate_sampling(agent_df)
         gt_xys -= norm_center  # normalize to last observed timestamp point of agent
         candidates -= norm_center
+
+        # rotate the coordinate
+        xys_norm = self.__rotate__(xys_norm, norm_vector)
+        candidates = self.__rotate__(candidates, norm_vector)
+        gt_xys = self.__rotate__(gt_xys, norm_vector)
 
         # handle the gt
         if len(gt_xys) > 0:
@@ -218,7 +230,7 @@ class ArgoversePreprocessor(Preprocessor):
         return [xys_norm, agent_df['OBJECT_TYPE'].iloc[0], ts, agent_df['TRACK_ID'].iloc[0],
                 candidates, candidate_gt, offset_gt, gt_xys[-1, :], gt_xys]
 
-    def __extract_obj_feat(self, obj_df, agnt_df, norm_center):
+    def __extract_obj_feat(self, obj_df, agnt_df, norm_center, norm_vector):
         obj_feat_ls = []
         for track_id, obj_sub_df in obj_df.groupby("TRACK_ID"):
             # skip object with timestamps less than obs_horizon
@@ -236,17 +248,21 @@ class ArgoversePreprocessor(Preprocessor):
             diff = xys - agnt_xys
             dis = np.sqrt(np.power(diff[:, 0], 2) + np.power(diff[:, 1], 2))
             if not np.any(dis <= self.obs_range):
+                obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
                 continue                            # skip this obj if it is not within the range for one single ts
 
             xys = self.__norm_and_vec__(xys, norm_center)
             ts = (ts[:-1] + ts[1:]) / 2
+
+            # rotate the coordinate
+            xys = self.__rotate__(xys, norm_vector)
 
             obj_feat_ls.append(
                 [xys, obj_sub_df['OBJECT_TYPE'].iloc[0], ts, track_id]
             )
         return obj_feat_ls, obj_df
 
-    def __extract_lane_feat(self, agent_df, obj_df, norm_center):
+    def __extract_lane_feat(self, agent_df, obj_df, norm_center, norm_vector):
         city_name = agent_df["CITY_NAME"].values[0]
         # include traj lane ids
         # lane_ids = self.__get_lane_ids_base_traj(agent_df, self.obs_range)
@@ -267,6 +283,10 @@ class ArgoversePreprocessor(Preprocessor):
             centerlane[:, :2] -= norm_center
             halluc_lane_1, halluc_lane_2 = self.__get_halluc_lane(centerlane, city_name)
 
+            # rotate the coordinate
+            halluc_lane_1 = self.__rotate__(halluc_lane_1, norm_vector)
+            halluc_lane_2 = self.__rotate__(halluc_lane_2, norm_vector)
+
             lane_feat_ls.append(
                 [halluc_lane_1, halluc_lane_2, traffic_control, is_intersection, lane_id]
             )
@@ -282,6 +302,62 @@ class ArgoversePreprocessor(Preprocessor):
         """
         traj_norm = traj - norm_center
         return np.hstack((traj_norm[:-1], traj_norm[1:]))
+
+    @staticmethod
+    def __rotate__(in_data, norm_vector):
+        """
+        rotate the coordinate and ensure the norm_vector pointing upwards
+        :param in_data: numpy.array (n, 4) or (n, 6)
+        :param norm_vector: numpy.array (2, )
+        :return numpy array, (n, 4) or (n, 6)
+        """
+
+        if in_data.shape[1] == 6:
+            # rotate end
+            y = np.matmul(in_data[:, 0:2], norm_vector)
+            x_vec = in_data[:, 0:2] - y.reshape((-1, 1)) * norm_vector.reshape((1, -1))
+            x = np.sqrt(x_vec[:, 0] ** 2 + x_vec[:, 1] ** 2)
+
+            in_data[:, 0] = x
+            in_data[:, 1] = y
+
+            # rotate start
+            y = np.matmul(in_data[:, 3:5], norm_vector)
+            x_vec = in_data[:, 3:5] - y.reshape((-1, 1)) * norm_vector.reshape((1, -1))
+            x = np.sqrt(x_vec[:, 0] ** 2 + x_vec[:, 1] ** 2)
+
+            in_data[:, 3] = x
+            in_data[:, 4] = y
+
+        elif in_data.shape[1] == 4:
+            # rotate end
+            y = np.matmul(in_data[:, 0:2], norm_vector)
+            x_vec = in_data[:, 0:2] - y.reshape((-1, 1)) * norm_vector.reshape((1, -1))
+            x = np.sqrt(x_vec[:, 0] ** 2 + x_vec[:, 1] ** 2)
+
+            in_data[:, 0] = x
+            in_data[:, 1] = y
+
+            # rotate start
+            y = np.matmul(in_data[:, 2:], norm_vector)
+            x_vec = in_data[:, 2:] - y.reshape((-1, 1)) * norm_vector.reshape((1, -1))
+            x = np.sqrt(x_vec[:, 0] ** 2 + x_vec[:, 1] ** 2)
+
+            in_data[:, 2] = x
+            in_data[:, 3] = y
+
+        elif in_data.shape[1] == 2:
+            # rotate point
+            y = np.matmul(in_data, norm_vector)
+            x_vec = in_data - y.reshape((-1, 1)) * norm_vector.reshape((1, -1))
+            x = np.sqrt(x_vec[:, 0] ** 2 + x_vec[:, 1] ** 2)
+
+            in_data[:, 0] = x
+            in_data[:, 1] = y
+        else:
+            raise Exception("[ArgoversePreprocessor]: Error in the input data dimension before rotation!")
+
+        return in_data
 
     def __get_halluc_lane(self, centerlane, city_name):
         """
@@ -405,7 +481,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0617"
     argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:

@@ -183,7 +183,7 @@ class TNTTrainer(Trainer):
             learning_rate = self.optm_schedule.step_and_update_lr()
             self.write_log("LR", learning_rate, epoch)
 
-        return avg_loss / num_sample
+        return avg_loss
 
     # todo: the inference of the model
     def test(self, data):

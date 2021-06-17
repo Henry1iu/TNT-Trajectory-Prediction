@@ -70,7 +70,7 @@ class VectorNetBackbone(nn.Module):
 
         if self.training and self.with_aux:
             batch_size = data.num_graphs
-            mask_polyline_indices = [random.randint(0, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
+            mask_polyline_indices = [random.randint(1, time_step_len - 1) + i*time_step_len for i in range(batch_size)]
             aux_gt = sub_graph_out.x[mask_polyline_indices]
             sub_graph_out.x[mask_polyline_indices] = 0.0
 
@@ -87,13 +87,17 @@ class VectorNetBackbone(nn.Module):
                 node_list = torch.tensor([i for i in range(idx * time_step_len, idx * time_step_len + valid_lens[idx])],
                                          device=self.device).long()
                 xx, yy = torch.meshgrid(node_list, node_list)
-                edge_index = torch.hstack([edge_index, torch.vstack([xx.reshape(-1), yy.reshape(-1)])])
+                xy = torch.vstack([xx.reshape(-1), yy.reshape(-1)])
+                edge_index = torch.hstack([edge_index, xy[:, xy[0] != xy[1]]])
+                # edge_index = torch.hstack([edge_index, torch.combinations(node_list, 2).T])
 
         elif isinstance(data, Data):
             # single batch case
             node_list = torch.tensor([i for i in range(valid_lens[0])], device=self.device).long()
             xx, yy = torch.meshgrid(node_list, node_list)
             edge_index = torch.vstack([xx.reshape(-1), yy.reshape(-1)])
+            edge_index = edge_index[:, edge_index[0] != edge_index[1]]         # remove the self-loop
+            # edge_index = torch.combinations(node_list, 2).T
         else:
             raise NotImplementedError
         sub_graph_out.edge_index = edge_index

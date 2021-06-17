@@ -191,15 +191,16 @@ class ArgoverseInMem(InMemoryDataset):
             # rearrange x in the sequence of mask
             x_ls = []
             edge_index_ls = []
+            edge_index_start = 0
             for id_, mask_ in traj_mask.items():
                 data_ = poly_feat[mask_[0]:mask_[1]]
-                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], 0)
+                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], edge_index_start)
                 x_ls.append(data_)
                 edge_index_ls.append(edge_index_)
 
             for id_, mask_ in lane_mask.items():
                 data_ = poly_feat[mask_[0]+add_len: mask_[1]+add_len]
-                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], 0)
+                edge_index_, edge_index_start = get_fc_edge_index(data_.shape[0], edge_index_start)
                 x_ls.append(data_)
                 edge_index_ls.append(edge_index_)
             edge_index = np.hstack(edge_index_ls)
