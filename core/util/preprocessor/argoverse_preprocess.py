@@ -68,7 +68,9 @@ class ArgoversePreprocessor(Preprocessor):
         vec_end = agent_df[['X', 'Y']].values[(self.obs_horizon-3): self.obs_horizon]
         norm_vector = vec_end - vec_start               # [3, 2]
         norm_vector = np.mean(norm_vector, axis=0)
-        norm_vector /= np.sqrt(norm_vector[0] ** 2 + norm_vector[1] ** 2)
+        norm_vector /= np.sqrt(norm_vector[0] ** 2 + norm_vector[1] ** 2) + np.finfo(float).eps
+        if np.any(np.isnan(norm_vector)):
+            norm_vector = np.array([0.0, 1.0])
 
         if not isinstance(agent_df, pd.DataFrame):
             return None, None, None         # return None if no agent in the sequence
