@@ -1,14 +1,17 @@
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import DataParallel
+from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 
 from core.trainer.trainer import Trainer
 from core.model.TNT import TNT
 from core.optim_schedule import ScheduledOptim
+from core.util.viz_utils import show_pred_and_gt
 
 
 class TNTTrainer(Trainer):
@@ -87,16 +90,15 @@ class TNTTrainer(Trainer):
         # resume from model file or maintain the original
         if model_path:
             self.load(model_path, 'm')
+
+        if self.multi_gpu:
+            self.model = DataParallel(self.model)
+            if self.verbose:
+                print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
         else:
-            # multi-gpu training or not
-            if self.multi_gpu:
-                self.model = DataParallel(self.model)
-                if self.verbose:
-                    print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
-            else:
-                if self.verbose:
-                    print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
-            self.model = self.model.to(self.device)
+            if self.verbose:
+                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
+        self.model = self.model.to(self.device)
 
         # init optimizer
         self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
@@ -166,13 +168,6 @@ class TNTTrainer(Trainer):
             num_sample += n_graph
             avg_loss += loss.item()
 
-            # print log info
-            # log = {
-            #     "iter": i,
-            #     "loss": loss.item(),
-            #     "avg_loss": avg_loss / num_sample
-            # }
-            # data_iter.write(str(log))
             desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
                                                                                  epoch,
                                                                                  loss.item() / n_graph,
@@ -186,5 +181,48 @@ class TNTTrainer(Trainer):
         return avg_loss
 
     # todo: the inference of the model
-    def test(self, data):
-        raise NotImplementedError
+    def test(self, miss_threshold=2.0):
+        self.model.eval()
+
+        forecasted_trajectories, gt_trajectories = {}, {}
+        seq_id = 0
+
+        k = self.model.k if not self.multi_gpu else self.model.module.k
+        horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+
+        with torch.no_grad():
+            for data in tqdm(self.test_loader):
+                batch_size = data.num_graphs
+                gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1).numpy()
+
+                # inference and transform dimension
+                if self.multi_gpu:
+                    out = self.model.module(data.to(self.device))
+                else:
+                    out = self.model(data.to(self.device))
+                dim_out = len(out.shape)
+                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
+
+                # record the prediction and ground truth
+                for batch_id in range(batch_size):
+                    forecasted_trajectories[seq_id] = [pred_y_k for pred_y_k in pred_y[batch_id]]
+                    gt_trajectories[seq_id] = gt[batch_id]
+                    seq_id += 1
+
+        # compute the metric
+        metric_results = get_displacement_errors_and_miss_rate(
+            forecasted_trajectories,
+            gt_trajectories,
+            k,
+            horizon,
+            miss_threshold
+        )
+        print("[TNTTrainer]: The test result: {};".format(metric_results))
+
+        # plot the result
+        fig, ax = plt.subplots()
+        for key in forecasted_trajectories.keys():
+            ax.set_xlim(-15, 15)
+            show_pred_and_gt(ax, gt_trajectories[key], forecasted_trajectories[key])
+            plt.pause(3)
+            ax.clear()

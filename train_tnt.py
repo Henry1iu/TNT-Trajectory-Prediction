@@ -19,7 +19,7 @@ sys.path.append("core/dataloader")
 
 def train(args):
     """
-    script to train the vectornet
+    script to train the tnt
     :param args:
     :return:
     """
@@ -104,7 +104,7 @@ def train(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0617",
                         help="root dir for datasets")
     parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/tnt/",
                         help="ex)dir to save checkpoint and model")
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--aux_loss", action="store_true", default=True,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=1,
+    parser.add_argument("-b", "--batch_size", type=int, default=128,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     #                     help="CUDA device ids")
     parser.add_argument("--log_freq", type=int, default=2,
                         help="printing loss every n iter: setting n")
-    parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
+    # parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=3e-3, help="learning rate of adam")
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
@@ -142,7 +142,9 @@ if __name__ == "__main__":
     parser.add_argument("-rc", "--resume_checkpoint", type=str,
                         # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
                         help="resume a checkpoint for fine-tune")
-    parser.add_argument("-rm", "--resume_model", type=str, help="resume a model state for fine-tune")
+    parser.add_argument("-rm", "--resume_model", type=str,
+                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-18-23-33/best_DataParallel.pth",
+                        help="resume a model state for fine-tune")
 
     args = parser.parse_args()
     train(args)

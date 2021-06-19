@@ -98,7 +98,7 @@ class Trainer(object):
         self.model.eval()
         return self.iteration(epoch, self.eval_loader)
 
-    def test(self, data):
+    def test(self):
         raise NotImplementedError
 
     def iteration(self, epoch, dataloader):

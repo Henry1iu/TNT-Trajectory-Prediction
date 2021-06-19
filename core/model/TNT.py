@@ -199,7 +199,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.25):
+    def traj_selection(self, traj_in, score, threshold=0.01):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
