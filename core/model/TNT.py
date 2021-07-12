@@ -15,7 +15,6 @@ from core.model.layers.scoring_and_selection import TrajScoreSelection, distance
 from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
 
 
-# todo: params initialization
 class TNT(nn.Module):
     def __init__(self,
                  in_channels=8,
@@ -36,7 +35,8 @@ class TNT(nn.Module):
                  lambda1=0.1,
                  lambda2=1.0,
                  lambda3=0.1,
-                 device=torch.device("cpu")):
+                 device=torch.device("cpu"),
+                 multi_gpu: bool = False):
         """
         TNT algorithm for trajectory prediction
         :param in_channels: int, the number of channels of the input node features
@@ -58,6 +58,7 @@ class TNT(nn.Module):
         :param lambda2: float, the weight of motion estimation loss
         :param lambda3: float, the weight of trajectory scoring loss
         :param device: the device for computation
+        :param multi_gpu: the multi gpu setting
         """
         super(TNT, self).__init__()
         self.horizon = horizon
@@ -105,6 +106,11 @@ class TNT(nn.Module):
             device=self.device
         )
         self._init_weight()
+
+        # if multi_gpu:
+        #     self.target_pred_layer = nn.DataParallel(self.target_pred_layer)
+        #     self.motion_estimator = nn.DataParallel(self.motion_estimator)
+        #     self.traj_score_layer = nn.DataParallel(self.traj_score_layer)
 
     def forward(self, data):
         """
@@ -166,7 +172,7 @@ class TNT(nn.Module):
 
         # add the motion estimation loss
         location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
-        traj_loss = self.motion_estimator.loss(
+        traj_loss, _ = self.motion_estimator.loss(
             target_feat,
             location_gt,
             traj_gt,
@@ -176,12 +182,12 @@ class TNT(nn.Module):
 
         # add the score and selection loss
         pred_tar, pred_offset = self.target_pred_layer(target_feat, target_candidate)
-        pred_traj = self.motion_estimator(target_feat, pred_tar+pred_offset)
+        traj_pred = self.motion_estimator(target_feat, pred_tar+pred_offset)
         score_loss = self.traj_score_layer.loss(
             target_feat,
-            pred_traj,
+            traj_pred,
             traj_gt,
-            reduction
+            reduction=reduction
         )
         loss += self.lambda3 * score_loss
 
@@ -199,7 +205,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.01):
+    def traj_selection(self, traj_in, score, threshold=0.004):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]

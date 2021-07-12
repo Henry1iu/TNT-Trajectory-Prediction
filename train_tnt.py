@@ -114,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--aux_loss", action="store_true", default=True,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=128,
+    parser.add_argument("-b", "--batch_size", type=int, default=512,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
@@ -143,7 +143,7 @@ if __name__ == "__main__":
                         # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-18-23-33/best_DataParallel.pth",
+                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-18-23-33/best_DataParallel.pth",
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()

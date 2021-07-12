@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import DataParallel
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
@@ -29,12 +29,13 @@ class TNTTrainer(Trainer):
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=10,
+                 warmup_epoch=30,
                  lr_update_freq=5,
                  lr_decay_rate=0.3,
                  aux_loss: bool = False,
                  with_cuda: bool = False,
                  cuda_device=None,
+                 enable_log=True,
                  log_freq: int = 2,
                  save_folder: str = "",
                  model_path: str = None,
@@ -69,6 +70,7 @@ class TNTTrainer(Trainer):
             warmup_epoch=warmup_epoch,
             with_cuda=with_cuda,
             cuda_device=cuda_device,
+            enable_log=enable_log,
             log_freq=log_freq,
             save_folder=save_folder,
             verbose=verbose
@@ -84,7 +86,8 @@ class TNTTrainer(Trainer):
             horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
-            device=self.device
+            device=self.device,
+            multi_gpu=self.multi_gpu
         )
 
         # resume from model file or maintain the original
@@ -92,7 +95,7 @@ class TNTTrainer(Trainer):
             self.load(model_path, 'm')
 
         if self.multi_gpu:
-            self.model = DataParallel(self.model)
+            # self.model = DataParallel(self.model)
             if self.verbose:
                 print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
         else:
@@ -101,7 +104,7 @@ class TNTTrainer(Trainer):
         self.model = self.model.to(self.device)
 
         # init optimizer
-        self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
+        self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(
             self.optim,
             self.lr,
@@ -132,10 +135,16 @@ class TNTTrainer(Trainer):
         )
 
         for i, data in data_iter:
-            n_graph = data.num_graphs
+            if not self.multi_gpu:
+                n_graph = data.num_graphs
+            else:
+                n_graph = len(data)
+
             if training:
                 if self.multi_gpu:
-                    loss, loss_dict = self.model.module.loss(data.to(self.device))
+                    # loss, loss_dict = self.model.module.loss(data.to(self.device))
+                    loss, loss_dict = self.model.loss(data.to(self.device))
+                    # loss, loss_dict = self.model.module.loss(data)
                 else:
                     loss, loss_dict = self.model.loss(data.to(self.device))
 
@@ -144,15 +153,16 @@ class TNTTrainer(Trainer):
                 self.optim.step()
 
                 # writing loss
-                self.write_log("Train_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Loss", loss_dict["target_loss"].item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Traj_Loss", loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Score_Loss", loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Loss", loss_dict["target_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Traj_Loss", loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Score_Loss", loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
                     if self.multi_gpu:
-                        loss, loss_dict = self.model.module.loss(data.to(self.device))
+                        # loss, loss_dict = self.model.module.loss(data.to(self.device))
+                        loss, loss_dict = self.model.loss(data.to(self.device))
                     else:
                         loss, loss_dict = self.model.loss(data.to(self.device))
 
@@ -166,11 +176,11 @@ class TNTTrainer(Trainer):
                                    loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
-            avg_loss += loss.item()
+            avg_loss += loss.detach().item()
 
             desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
                                                                                  epoch,
-                                                                                 loss.item() / n_graph,
+                                                                                 loss.detach().item() / n_graph,
                                                                                  avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
@@ -187,8 +197,10 @@ class TNTTrainer(Trainer):
         forecasted_trajectories, gt_trajectories = {}, {}
         seq_id = 0
 
-        k = self.model.k if not self.multi_gpu else self.model.module.k
-        horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+        # k = self.model.k if not self.multi_gpu else self.model.module.k
+        k = self.model.k
+        # horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+        horizon = self.model.horizon
 
         with torch.no_grad():
             for data in tqdm(self.test_loader):
@@ -197,7 +209,8 @@ class TNTTrainer(Trainer):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    out = self.model.module(data.to(self.device))
+                    # out = self.model.module(data.to(self.device))
+                    out = self.model(data.to(self.device))
                 else:
                     out = self.model(data.to(self.device))
                 dim_out = len(out.shape)

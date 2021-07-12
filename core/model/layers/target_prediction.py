@@ -24,7 +24,8 @@ class TargetPred(nn.Module):
         self.prob_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
+            # nn.LeakyReLU(inplace=True),
             # nn.Linear(hidden_dim, hidden_dim),
             # nn.LayerNorm(hidden_dim),
             # nn.LeakyReLU(inplace=True),
@@ -34,12 +35,16 @@ class TargetPred(nn.Module):
         self.mean_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
+            # nn.LeakyReLU(inplace=True),
             # nn.Linear(hidden_dim, hidden_dim),
             # nn.LayerNorm(hidden_dim),
             # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, 2)
         )
+
+        self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
+        self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor):
         """

@@ -10,8 +10,6 @@ from typing import List, Dict, Any
 
 from core.util.config import VELOCITY_THRESHOLD, RAW_DATA_FORMAT, OBJ_RADIUS, EXIST_THRESHOLD
 
-VELOCITY_THRESHOLD = 13
-
 
 def compute_velocity(track_df: pd.DataFrame) -> List[float]:
     """Compute velocities for the given track.

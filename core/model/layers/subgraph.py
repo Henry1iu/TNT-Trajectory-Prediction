@@ -22,6 +22,8 @@ class SubGraph(nn.Module):
                 f'glp_{i}', GraphLayerProp(in_channels, hidden_unit))
             in_channels *= 2
 
+        # self.layer_seq = nn.DataParallel(self.layer_seq,  device_ids=[1, 0])
+
     def forward(self, sub_data):
         """
         polyline vector set in torch_geometric.data.Data format

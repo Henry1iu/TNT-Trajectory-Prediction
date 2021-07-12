@@ -6,6 +6,9 @@ import pandas as pd
 import re
 from tqdm import tqdm
 
+import gc
+from copy import deepcopy, copy
+
 import torch
 from torch_geometric.data import Data, Dataset, InMemoryDataset, DataLoader
 # from torch.utils.data import DataLoader
@@ -108,7 +111,7 @@ class Argoverse(Dataset):
             graph_input = GraphData(
                 x=torch.from_numpy(x),
                 y=torch.from_numpy(y),
-                cluster=torch.from_numpy(cluster),
+                cluster=torch.from_numpy(cluster).short(),
                 edge_index=torch.from_numpy(edge_index).long(),
                 valid_len=torch.tensor([valid_len[ind]]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
@@ -170,6 +173,8 @@ class ArgoverseInMem(InMemoryDataset):
         print("[Argoverse]: The longest valid length is {}.".format(index_to_pad))
         print("[Argoverse]: The mean of valid length is {}.".format(np.mean(valid_len)))
 
+        # index_to_pad = 790
+
         # pad vectors to the largest polyline id and extend cluster, save the Data to disk
         print("[Argoverse]: Transforming the data to GraphData...")
         data_list = []
@@ -208,11 +213,12 @@ class ArgoverseInMem(InMemoryDataset):
 
             # input data
             graph_input = GraphData(
-                x=torch.from_numpy(x),
-                y=torch.from_numpy(y),
-                cluster=torch.from_numpy(cluster),
+                x=torch.from_numpy(x).float(),
+                y=torch.from_numpy(y).float(),
+                cluster=torch.from_numpy(cluster).short(),
                 edge_index=torch.from_numpy(edge_index),
-                valid_len=torch.tensor([valid_len[ind]]),
+                # valid_len=torch.tensor([valid_len[ind]]),
+                valid_len=torch.tensor([cluster.max()]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
                 candidate=torch.from_numpy(candidate).float(),
                 candidate_gt=torch.from_numpy(gt_candidate).float(),
@@ -231,34 +237,37 @@ class ArgoverseInMem(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
     def get(self, idx):
-        data = super(ArgoverseInMem, self).get(idx)
+        data = super(ArgoverseInMem, self).get(idx).clone()
 
         feature_len = data.x.shape[1]
         index_to_pad = data.time_step_len[0].item() - 1
 
         # pad feature with zero nodes
-        data.x = torch.cat([data.x, torch.zeros((index_to_pad - data.cluster.max().item(), feature_len), dtype=data.x.dtype)])
-        data.cluster = torch.cat([data.cluster, torch.arange(data.cluster.max()+1, index_to_pad+1)])
-        return data
+        data.x = torch.cat([data.x, torch.zeros((index_to_pad - data.cluster.max().item(), feature_len), dtype=data.x.dtype)]).clone()
+        data.cluster = torch.cat([data.cluster, torch.arange(data.cluster.max()+1, index_to_pad+1)]).clone()
+        return copy(data)
 
 
 if __name__ == "__main__":
+    gc.collect()
+
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0617"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0624"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
-    for folder in ["train", "val"]:
+    # for folder in ["train", "val"]:
+    for folder in ["train"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         # dataset = Argoverse(dataset_input_path)
         dataset = ArgoverseInMem(dataset_input_path)
-        batch_iter = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=True, pin_memory=True)
-        for i, data in tqdm(enumerate(batch_iter), total=len(batch_iter), bar_format="{l_bar}{r_bar}"):
-            if i == 2:
-                break
+        batch_iter = DataLoader(dataset, batch_size=8, num_workers=8, shuffle=True, pin_memory=True)
+        for k in range(3):
+            for i, data in enumerate(tqdm(batch_iter, total=len(batch_iter), bar_format="{l_bar}{r_bar}")):
+                pass
 
             # print("{}".format(i))
             # candit_gt = data.candidate_gt

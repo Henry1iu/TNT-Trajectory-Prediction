@@ -56,12 +56,15 @@ class TrajScoreSelection(nn.Module):
         self.score_mlp = nn.Sequential(
             nn.Linear(feat_channels + horizon * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
+            # nn.LeakyReLU(inplace=True),
             # nn.Linear(hidden_dim, hidden_dim),
             # nn.LayerNorm(hidden_dim),
             # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
+
+        self.score_mlp = nn.DataParallel(self.score_mlp, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
@@ -90,12 +93,16 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
+        # print("[TrajScoreSelection]: Score GT: {}".format(score_gt))
+        # print("[TrajScoreSelection]: Score Pred: {}".format(score_pred))
+
         logprobs = - torch.log(score_pred)
         batch = traj_in.shape[0]
         if reduction == 'mean':
             loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
         else:
             loss = torch.sum(torch.mul(logprobs, score_gt))
+        # print("[TrajScoreSelection]: loss: {}".format(loss))
         return loss
         # return F.kl_div(score_pred, score_gt, reduction=reduction)
 

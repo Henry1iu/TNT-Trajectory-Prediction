@@ -236,6 +236,7 @@ class ArgoversePreprocessor(Preprocessor):
         obj_feat_ls = []
         for track_id, obj_sub_df in obj_df.groupby("TRACK_ID"):
             # skip object with timestamps less than obs_horizon
+            # if len(obj_sub_df) < self.obs_horizon or is_track_stationary(obj_sub_df):
             if len(obj_sub_df) < self.obs_horizon or is_track_stationary(obj_sub_df):
                 obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
                 continue
@@ -243,15 +244,15 @@ class ArgoversePreprocessor(Preprocessor):
             xys = obj_sub_df[['X', 'Y']].values
             ts = obj_sub_df["TIMESTAMP"].values
 
-            # check if there exist a ts that the obj is within the detection range of agent
-            agnt_ts = agnt_df["TIMESTAMP"].values
-            ids = np.concatenate([np.where(agnt_ts == t)[0] for t in ts])
-            agnt_xys = agnt_df[['X', 'Y']].values[ids]
-            diff = xys - agnt_xys
-            dis = np.sqrt(np.power(diff[:, 0], 2) + np.power(diff[:, 1], 2))
-            if not np.any(dis <= self.obs_range):
-                obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
-                continue                            # skip this obj if it is not within the range for one single ts
+            # # check if there exist a ts that the obj is within the detection range of agent
+            # agnt_ts = agnt_df["TIMESTAMP"].values
+            # ids = np.concatenate([np.where(agnt_ts == t)[0] for t in ts])
+            # agnt_xys = agnt_df[['X', 'Y']].values[ids]
+            # diff = xys - agnt_xys
+            # dis = np.sqrt(np.power(diff[:, 0], 2) + np.power(diff[:, 1], 2))
+            # if not np.any(dis <= self.obs_range):
+            #     obj_df = obj_df[obj_df["TRACK_ID"] != track_id]
+            #     continue                            # skip this obj if it is not within the range for one single ts
 
             xys = self.__norm_and_vec__(xys, norm_center)
             ts = (ts[:-1] + ts[1:]) / 2
@@ -470,7 +471,7 @@ class ArgoversePreprocessor(Preprocessor):
             return gt
 
         offset_gt = np.vstack((gt[0], gt[1:] - gt[:-1]))
-        assert (offset_gt.cumsum(axis=0) -gt).sum() < 1e-6, f"{(offset_gt.cumsum(axis=0) -gt).sum()}"
+        assert (offset_gt.cumsum(axis=0) - gt).sum() < 1e-6, f"{(offset_gt.cumsum(axis=0) -gt).sum()}"
 
         return offset_gt
 
@@ -483,7 +484,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0617"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0624"
     argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:

@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch_geometric.nn import MessagePassing, max_pool
 from torch_geometric.utils import add_self_loops, degree
 from torch_geometric.data import Data
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATConv, GATv2Conv
 
 
 class GlobalGraph(nn.Module):
@@ -37,9 +37,11 @@ class GlobalGraph(nn.Module):
             # )
 
             self.layers.add_module(
-                f'glp_{i}', GATConv(in_channels, self.global_graph_width, add_self_loops=False)
+                f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
             )
             in_channels = self.global_graph_width
+
+        # self.layers = nn.DataParallel(self.layers, device_ids=[1, 0])
 
     def forward(self, global_data):
         x, edge_index = global_data.x, global_data.edge_index
@@ -51,7 +53,7 @@ class GlobalGraph(nn.Module):
             if isinstance(layer, SelfAttentionLayer):
                 x = layer(x, edge_index, valid_lens)
 
-            elif isinstance(layer, GATConv):
+            elif isinstance(layer, GATv2Conv):
                 x = layer(x, edge_index)
 
         return x

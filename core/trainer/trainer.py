@@ -7,10 +7,12 @@ import json
 
 import torch
 
-# from torch.utils.data import DataLoader
+# from torch.utils.data import DataLoader,
 from torch.utils.tensorboard import SummaryWriter
-from torch_geometric.data import DataLoader
+from torch_geometric.data import DataLoader, DataListLoader
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
+
+import gc
 
 
 class Trainer(object):
@@ -30,6 +32,7 @@ class Trainer(object):
                  warmup_epoch=5,
                  with_cuda: bool = False,
                  cuda_device=None,
+                 enable_log: bool = False,
                  log_freq: int = 2,
                  save_folder: str = "",
                  verbose: bool = True
@@ -50,26 +53,32 @@ class Trainer(object):
         # determine cuda device id
         self.cuda_id = cuda_device if with_cuda and cuda_device else [0]
         self.device = torch.device("cuda:{}".format(self.cuda_id[0]) if torch.cuda.is_available() and with_cuda else "cpu")
+        self.multi_gpu = False if len(self.cuda_id) == 1 else True
+
 
         # dataset
         self.trainset = trainset
         self.evalset = evalset
         self.testset = testset
         self.batch_size = batch_size
+        # self.loader = loader if not self.multi_gpu else DataListLoader
+        self.loader = loader
+        # print("[Debug]: using {} to load data".format(self.loader))
 
-        self.train_loader = loader(
+        self.train_loader = self.loader(
             self.trainset,
             batch_size=self.batch_size,
-            num_workers=num_workers,
-            pin_memory=True,
+            # num_workers=num_workers,
+            # pin_memory=True,
             shuffle=True
         )
-        self.eval_loader = loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
-        self.test_loader = loader(self.testset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size)
+        # self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        self.test_loader = self.loader(self.testset, batch_size=self.batch_size)
 
         # model
         self.model = None
-        self.multi_gpu = False if len(self.cuda_id) == 1 else True
 
         # optimizer params
         self.lr = lr
@@ -85,10 +94,13 @@ class Trainer(object):
         self.best_metric = None
 
         # log
+        self.enable_log = enable_log
         self.save_folder = save_folder
         self.logger = SummaryWriter(log_dir=os.path.join(self.save_folder, "log"))
         self.log_freq = log_freq
         self.verbose = verbose
+
+        gc.collect()
 
     def train(self, epoch):
         self.model.train()
@@ -105,6 +117,8 @@ class Trainer(object):
         raise NotImplementedError
 
     def write_log(self, name_str, data, epoch):
+        if not self.enable_log:
+            return
         self.logger.add_scalar(name_str, data, epoch)
 
     # todo: save the model and current training status
@@ -121,7 +135,8 @@ class Trainer(object):
             os.makedirs(self.save_folder, exist_ok=True)
         torch.save({
             "epoch": iter_epoch,
-            "model_state_dict": self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            # "model_state_dict": self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optim.state_dict(),
             "min_eval_loss": loss
         }, os.path.join(self.save_folder, "checkpoint_iter{}.ckpt".format(iter_epoch)))
@@ -154,7 +169,8 @@ class Trainer(object):
 
         # save model
         torch.save(
-            self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            # self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            self.model.state_dict(),
             os.path.join(self.save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
         if self.verbose:
@@ -199,8 +215,10 @@ class Trainer(object):
         forecasted_trajectories, gt_trajectories = {}, {}
         seq_id = 0
 
-        k = self.model.k if not self.multi_gpu else self.model.module.k
-        horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+        # k = self.model.k if not self.multi_gpu else self.model.module.k
+        # horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
+        k = self.model.k
+        horizon = self.model.horizon
 
         self.model.eval()
         with torch.no_grad():
@@ -210,7 +228,8 @@ class Trainer(object):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    out = self.model.module(data.to(self.device))
+                    # out = self.model.module(data.to(self.device))
+                    out = self.model(data.to(self.device))
                 else:
                     out = self.model(data.to(self.device))
                 dim_out = len(out.shape)

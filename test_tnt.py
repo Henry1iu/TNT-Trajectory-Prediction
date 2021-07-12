@@ -27,12 +27,13 @@ def test(args):
 
     # init trainer
     trainer = TNTTrainer(
-        trainset=test_set,
-        evalset=test_set,
+        trainset=[],
+        evalset=[],
         testset=test_set,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         aux_loss=True,
+        enable_log=False,
         with_cuda=args.with_cuda,
         cuda_device=args.cuda_device,
         ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
@@ -45,7 +46,7 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0617",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0624",
                         help="root dir for datasets")
     parser.add_argument("-b", "--batch_size", type=int, default=128,
                         help="number of batch_size")
@@ -61,7 +62,7 @@ if __name__ == "__main__":
                         # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-18-23-33/best_DataParallel.pth",
+                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-25-21-24/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()

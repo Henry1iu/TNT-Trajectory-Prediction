@@ -23,12 +23,15 @@ class MotionEstimation(nn.Module):
         self.traj_pred = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
+            # nn.LeakyReLU(inplace=True),
             # nn.Linear(hidden_dim, hidden_dim),
             # nn.LayerNorm(hidden_dim),
             # nn.LeakyReLU(inplace=True),
             nn.Linear(hidden_dim, horizon * 2)
         )
+
+        self.traj_pred = nn.DataParallel(self.traj_pred, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """
@@ -71,7 +74,7 @@ class MotionEstimation(nn.Module):
         # print("[DEBUG]: traj_gt: \n{};".format(traj_gt.detach().cpu().numpy()))
         # print("[DEBUG]: difference: \n{};".format((traj_pred - traj_gt).detach().cpu().numpy()))
         # ====================================== DEBUG ====================================== #
-        return loss
+        return loss, traj_pred.unsqueeze(1)
 
     def inference(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """
@@ -100,5 +103,6 @@ if __name__ == "__main__":
     print("shape of pred_traj: ", pred_traj.size())
 
     # loss
-    loss = layer.loss(feat_tensor.squeeze(1), loc_gt_tensor, traj_gt_tensor)
+    loss, pred_traj = layer.loss(feat_tensor.squeeze(1), loc_gt_tensor, traj_gt_tensor)
+    print("shape of pred_traj: ", pred_traj.size())
     print("Pass!")

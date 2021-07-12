@@ -54,6 +54,7 @@ class VectorNetBackbone(nn.Module):
                 nn.ReLU(),
                 nn.Linear(aux_mlp_width, self.polyline_vec_shape)
             )
+            self.aux_mlp = nn.DataParallel(self.aux_mlp, device_ids=[1, 0])
 
     def forward(self, data):
         """
@@ -81,6 +82,7 @@ class VectorNetBackbone(nn.Module):
         sub_graph_out.x = F.normalize(sub_graph_out.x, dim=0)
 
         edge_index = torch.empty((2, 0), device=self.device, dtype=torch.long)
+        # print("[Debug]: data type: {}".format(type(data)))
         if isinstance(data, Batch):
             # mini-batch case
             for idx in range(data.num_graphs):
