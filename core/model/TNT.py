@@ -25,7 +25,7 @@ class TNT(nn.Module):
                  global_graph_width=64,
                  with_aux=False,
                  aux_width=64,
-                 n=1000,
+                 n=702,
                  target_pred_hid=64,
                  m=50,
                  motion_esti_hid=64,
@@ -250,9 +250,9 @@ class TNT(nn.Module):
 
 
 if __name__ == "__main__":
-    batch_size = 256
+    batch_size = 32
     # DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    DATA_DIR = "../../dataset/interm_tnt_n_s"
+    DATA_DIR = "../../dataset/interm_tnt_n_s_0624"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')

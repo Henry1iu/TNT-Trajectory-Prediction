@@ -54,6 +54,10 @@ class ArgoversePreprocessor(Preprocessor):
 
                 yield self.folders[i], seq_f_name, seq.seq_df
 
+    def process(self, dataframe: pd.DataFrame, map_feat=True):
+        agent_feats, obj_feats, lane_feats = self.extract_feature(dataframe, map_feat=map_feat)
+        return self.encode_feature(agent_feats, obj_feats, lane_feats)
+
     def extract_feature(self, dataframe: pd.DataFrame, map_feat=True):
         # normalize timestamps
         dataframe['TIMESTAMP'] -= np.min(dataframe['TIMESTAMP'].values)
@@ -224,7 +228,6 @@ class ArgoversePreprocessor(Preprocessor):
 
         # handle the gt
         if len(gt_xys) > 0:
-            # todo: adjust the range for candidate sampling, now radian of 50 meter, 900 samples
             candidate_gt, offset_gt = self.get_candidate_gt(candidates, gt_xys[-1, :])
         else:
             candidate_gt, offset_gt = None, None
@@ -433,29 +436,36 @@ class ArgoversePreprocessor(Preprocessor):
             lane_ids.extend(lane_seg)
         return np.unique(lane_ids)
 
-    def __get_candidate_sampling(self, agent_df, n=1000):
-        # get the agent lane ids
-        ids = self.__get_lane_ids_base_traj(agent_df)
+    # def __get_candidate_sampling(self, agent_df, n=1000):
+    #     # get the agent lane ids
+    #     ids = self.__get_lane_ids_base_traj(agent_df)
+    #
+    #     # get the centerlines
+    #     city_name = agent_df["CITY_NAME"].values[0]
+    #     centerline_list = []
+    #     centerline_cnt = 0
+    #     for idx in ids:
+    #         centerlines = self.map.get_lane_segment_centerline(idx, city_name=city_name)
+    #         centerline_cnt += centerlines.shape[0] - 1
+    #         centerline_list.append(centerlines)
+    #
+    #     # assign the number of sampling in each centerline
+    #     candidates = np.empty((0, 2))
+    #     for i, centerlines in enumerate(centerline_list):
+    #         if i == len(centerline_list) - 1:
+    #             candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n - candidates.shape[0])])
+    #         else:
+    #             n_sub = int(n * (centerlines.shape[0] - 1) / centerline_cnt)
+    #             candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n_sub)])
+    #     assert candidates.shape[0] == n, "[ArgoversePreprocessor]: The number of generated candidates are not {}".format(n)
+    #     return candidates
 
+    def __get_candidate_sampling(self, agent_df, distance=0.5):
         # get the centerlines
         city_name = agent_df["CITY_NAME"].values[0]
-        centerline_list = []
-        centerline_cnt = 0
-        for idx in ids:
-            centerlines = self.map.get_lane_segment_centerline(idx, city_name=city_name)
-            centerline_cnt += centerlines.shape[0] - 1
-            centerline_list.append(centerlines)
-
-        # assign the number of sampling in each centerline
-        candidates = np.empty((0, 2))
-        for i, centerlines in enumerate(centerline_list):
-            if i == len(centerline_list) - 1:
-                candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n - candidates.shape[0])])
-            else:
-                n_sub = int(n * (centerlines.shape[0] - 1) / centerline_cnt)
-                candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n_sub)])
-        assert candidates.shape[0] == n, "[ArgoversePreprocessor]: The number of generated candidates are not {}".format(n)
-        return candidates
+        xy = agent_df[['X', 'Y']].values[:self.obs_horizon]
+        centerlines, _ = self.map.get_candidate_centerlines_for_traj(xy, city_name)
+        return self.lane_candidate_sampling(centerlines, distance=distance)
 
     @staticmethod
     def __trans_gt_offset_format(gt):
@@ -484,7 +494,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0624"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0722"
     argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:

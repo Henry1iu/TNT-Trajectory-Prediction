@@ -97,6 +97,8 @@ class TargetPred(nn.Module):
         batch_size, _, _ = tar_candidate.size()
 
         # pred prob and compute cls loss
+        # print("Shape of feat_in: {}".format(feat_in.shape))
+        # print("Shape of tar_candidate: {}".format(tar_candidate.shape))
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, self.N, 1), tar_candidate], dim=2)
         tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, self.N_tar]
         # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)       # [batch_size, self.N_tar]

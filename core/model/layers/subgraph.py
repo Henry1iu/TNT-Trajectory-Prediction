@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from torch_geometric.data import Data
-from torch_geometric.nn import MessagePassing, max_pool
+from torch_geometric.nn import MessagePassing, max_pool, avg_pool
 from torch_geometric.utils import add_self_loops
 
 
@@ -36,6 +36,7 @@ class SubGraph(nn.Module):
                 x = layer(x, edge_index)
         sub_data.x = x
         out_data = max_pool(sub_data.cluster, sub_data)
+
         # try:
         assert out_data.x.shape[0] % int(sub_data.time_step_len[0]) == 0
         # except:

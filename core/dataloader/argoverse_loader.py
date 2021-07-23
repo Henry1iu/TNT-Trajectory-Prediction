@@ -163,17 +163,19 @@ class ArgoverseInMem(InMemoryDataset):
         """ transform the raw data and store in GraphData """
         # counting the largest polyline id
         valid_len = []
+        candidate_len = []
         print("[Argoverse]: Counting the valid length...")
         for raw_path in tqdm(self.raw_paths):
             raw_data = pd.read_pickle(raw_path)
             poly_feat = raw_data["POLYLINE_FEATURES"].values[0]
             cluster = poly_feat[:, -1].reshape(-1).astype(np.int32)
             valid_len.append(cluster.max())
+            candidate_len.append(len(raw_data['CANDIDATES'].values[0]))
         index_to_pad = np.max(valid_len)
+        # candidate_len_max = np.max(candidate_len)
+        candidate_len_max = 702
         print("[Argoverse]: The longest valid length is {}.".format(index_to_pad))
         print("[Argoverse]: The mean of valid length is {}.".format(np.mean(valid_len)))
-
-        # index_to_pad = 790
 
         # pad vectors to the largest polyline id and extend cluster, save the Data to disk
         print("[Argoverse]: Transforming the data to GraphData...")
@@ -220,6 +222,7 @@ class ArgoverseInMem(InMemoryDataset):
                 # valid_len=torch.tensor([valid_len[ind]]),
                 valid_len=torch.tensor([cluster.max()]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
+                candidate_len_max=torch.tensor([candidate_len_max]).int(),
                 candidate=torch.from_numpy(candidate).float(),
                 candidate_gt=torch.from_numpy(gt_candidate).float(),
                 offset_gt=torch.from_numpy(gt_offset).float(),
@@ -241,10 +244,16 @@ class ArgoverseInMem(InMemoryDataset):
 
         feature_len = data.x.shape[1]
         index_to_pad = data.time_step_len[0].item() - 1
+        valid_len = data.valid_len[0].item()
 
         # pad feature with zero nodes
-        data.x = torch.cat([data.x, torch.zeros((index_to_pad - data.cluster.max().item(), feature_len), dtype=data.x.dtype)]).clone()
-        data.cluster = torch.cat([data.cluster, torch.arange(data.cluster.max()+1, index_to_pad+1)]).clone()
+        data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
+        data.cluster = torch.cat([data.cluster, torch.arange(valid_len+1, index_to_pad+1)])
+
+        # pad candidate and candidate_gt
+        num_cand_max = data.candidate_len_max[0].item()
+        data.candidate = torch.cat([data.candidate, torch.zeros((num_cand_max - len(data.candidate), 2))])
+        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))])
         return copy(data)
 
 
@@ -253,11 +262,11 @@ if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0624"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0722"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
     # for folder in ["train", "val"]:
-    for folder in ["train"]:
+    for folder in ["val"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")

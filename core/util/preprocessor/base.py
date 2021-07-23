@@ -34,9 +34,7 @@ class Preprocessor(object):
         :param map_feat: bool, output map feature or not
         :return: DataFrame[(same as orignal)]
         """
-
-        agent_feats, obj_feats, lane_feats = self.extract_feature(dataframe, map_feat=map_feat)
-        return self.encode_feature(agent_feats, obj_feats, lane_feats)
+        raise NotImplementedError
 
     def extract_feature(self, dataframe: pd.DataFrame, map_feat=True):
         """
@@ -87,7 +85,8 @@ class Preprocessor(object):
         :param dir_: str, the directory to store the csv file
         :return:
         """
-        raise NotImplementedError
+        df = self.process(dataframe, map_feat)
+        # self.save(df, set_name, file_name, dir_)
 
     @staticmethod
     def uniform_candidate_sampling(sampling_range, rate=30):
@@ -100,38 +99,63 @@ class Preprocessor(object):
         x = np.linspace(-sampling_range, sampling_range, rate)
         return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
 
-    # todo: uniform sampling along he land
+    # @staticmethod
+    # def lane_candidate_sampling(centerlines, n):
+    #     """
+    #     get sampling on the input centerlines
+    #     :param centerlines: np.array[lines, :]
+    #     :param n: the number of candiates
+    #     """
+    #     n_segment = centerlines.shape[0] - 1
+    #
+    #     rate = n // n_segment
+    #     n_mod = n % n_segment
+    #
+    #     candidates = []
+    #     if rate > 0:
+    #         for i in range(n_segment):
+    #             if i < n_mod:       # the rate is acturally rate + 1
+    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
+    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
+    #                 candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate + 1)])
+    #             else:               # the rate is rate
+    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / rate
+    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / rate
+    #                 candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate)])
+    #         assert len(candidates) == n, "[Preprocessor]: The number of generated candidates are not {}".format(n)
+    #     else:
+    #         for i in range(n_segment):
+    #             if i < n_mod:       # the rate is acturally rate + 1
+    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
+    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
+    #                 candidates.extend([[centerlines[i, 0] + dx / 2, centerlines[i, 1] + dy / 2]])
+    #     return np.array(candidates)
+
+    # todo: implement a candidate sampling with equal distance;
     @staticmethod
-    def lane_candidate_sampling(centerlines, n):
-        """
-        get sampling on the input centerlines
-        :param centerlines: np.array[lines, :]
-        :param n: the number of candiates
-        """
-        n_segment = centerlines.shape[0] - 1
-
-        rate = n // n_segment
-        n_mod = n % n_segment
-
+    def lane_candidate_sampling(centerline_list, distance=0.5):
+        """the input are list of lines, each line containing"""
         candidates = []
-        if rate > 0:
-            for i in range(n_segment):
-                if i < n_mod:       # the rate is acturally rate + 1
-                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
-                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
-                    candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate + 1)])
-                else:               # the rate is rate
-                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / rate
-                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / rate
-                    candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate)])
-            assert len(candidates) == n, "[Preprocessor]: The number of generated candidates are not {}".format(n)
-        else:
-            for i in range(n_segment):
-                if i < n_mod:       # the rate is acturally rate + 1
-                    dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
-                    dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
-                    candidates.extend([[centerlines[i, 0] + dx / 2, centerlines[i, 1] + dy / 2]])
-        return np.array(candidates)
+        for line in centerline_list:
+            for i in range(len(line) - 1):
+                if np.any(np.isnan(line[i])) or np.any(np.isnan(line[i+1])):
+                    continue
+                [x_diff, y_diff] = line[i+1] - line[i]
+                if x_diff == 0.0 and y_diff == 0.0:
+                    continue
+                candidates.append(line[i])
+
+                # compute displacement along each coordinate
+                d_x = distance * (y_diff / np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps))
+                d_y = distance * (x_diff / np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps))
+
+                num_c = np.floor(np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps) / distance).astype(np.int)
+                pt = line[i]
+                for _ in range(num_c):
+                    pt += np.array([d_x, d_y])
+                    candidates.append(pt)
+
+        return np.unique(np.asarray(candidates), axis=0)
 
     @staticmethod
     def get_candidate_gt(target_candidate, gt_target):

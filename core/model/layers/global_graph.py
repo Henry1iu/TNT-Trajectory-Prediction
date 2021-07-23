@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch_geometric.nn import MessagePassing, max_pool
 from torch_geometric.utils import add_self_loops, degree
 from torch_geometric.data import Data
-from torch_geometric.nn import GATConv, GATv2Conv
+from torch_geometric.nn import GATConv, GATv2Conv, TransformerConv
 
 
 class GlobalGraph(nn.Module):
@@ -38,6 +38,7 @@ class GlobalGraph(nn.Module):
 
             self.layers.add_module(
                 f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
+                # f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
             )
             in_channels = self.global_graph_width
 
@@ -54,6 +55,9 @@ class GlobalGraph(nn.Module):
                 x = layer(x, edge_index, valid_lens)
 
             elif isinstance(layer, GATv2Conv):
+                x = layer(x, edge_index)
+
+            elif isinstance(layer, TransformerConv):
                 x = layer(x, edge_index)
 
         return x
@@ -159,8 +163,7 @@ class SelfAttentionFCLayer(nn.Module):
         else:
             shape = X.shape
             if valid_len.dim() == 1:
-                valid_len = torch.repeat_interleave(
-                    valid_len, repeats=shape[1], dim=0)
+                valid_len = torch.repeat_interleave(valid_len, repeats=shape[1], dim=0)
             else:
                 valid_len = valid_len.reshape(-1)
             # Fill masked elements with a large negative, whose exp is 0
