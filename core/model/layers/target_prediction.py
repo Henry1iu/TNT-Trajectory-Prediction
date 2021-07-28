@@ -10,13 +10,11 @@ class TargetPred(nn.Module):
                  in_channels: int,
                  hidden_dim: int = 64,
                  m: int = 50,
-                 n: int = 1000,
                  device=torch.device("cpu")):
         """"""
         super(TargetPred, self).__init__()
         self.in_channels = in_channels
         self.hidden_dim = hidden_dim
-        self.N = n          # input candidates
         self.M = m          # output candidate target
 
         self.device = device
@@ -57,16 +55,16 @@ class TargetPred(nn.Module):
         assert feat_in.dim() == 2, "[TNT-TargetPred]: Error input feature dimension"
 
         feat_in = feat_in.unsqueeze(1)
-        batch_size, _, _ = feat_in.size()
+        batch_size, n, _ = tar_candidate.size()
         # print("tar_candidate size: {}".format(tar_candidate.size()))
 
         # stack the target candidates to the end of input feature
-        feat_in_repeat = torch.cat([feat_in.repeat(1, self.N, 1), tar_candidate.float()], dim=2)
+        feat_in_repeat = torch.cat([feat_in.repeat(1, n, 1), tar_candidate.float()], dim=2)
         # print("feat_in_repeat size: ", feat_in_repeat.size())
 
         # compute probability for each candidate
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat), dim=1).squeeze(-1)  # [batch_size, self.N_tar, 1]
-        tar_offset_mean = self.mean_mlp(feat_in_repeat)                                 # [batch_size, self.N_tar, 2]
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat), dim=1).squeeze(-1)  # [batch_size, n_tar, 1]
+        tar_offset_mean = self.mean_mlp(feat_in_repeat)                                # [batch_size, n_tar, 2]
         # print("tar_candit_pro size: ", tar_candit_prob.size())
         # print("tar_offset_mean size: ", tar_offset_mean.size())
 
@@ -94,14 +92,14 @@ class TargetPred(nn.Module):
         :param reduction: the reduction to apply to the loss output
         :return:
         """
-        batch_size, _, _ = tar_candidate.size()
+        batch_size, n, _ = tar_candidate.size()
 
         # pred prob and compute cls loss
         # print("Shape of feat_in: {}".format(feat_in.shape))
         # print("Shape of tar_candidate: {}".format(tar_candidate.shape))
-        feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, self.N, 1), tar_candidate], dim=2)
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, self.N_tar]
-        # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)       # [batch_size, self.N_tar]
+        feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, n, 1), tar_candidate], dim=2)
+        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, n_tar]
+        # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)                               # [batch_size, n_tar]
 
         # classfication output
         n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)

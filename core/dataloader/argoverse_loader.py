@@ -37,7 +37,7 @@ class GraphData(Data):
 class Argoverse(Dataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super(Argoverse, self).__init__(root, transform, pre_transform)
-
+        gc.collect()
         # self.data_list = [torch.load(osp.join(self.processed_dir, f_na)) for f_na in self.processed_file_names]
 
     @property
@@ -147,6 +147,7 @@ class ArgoverseInMem(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super(ArgoverseInMem, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
+        gc.collect()
 
     @property
     def raw_file_names(self):
@@ -172,8 +173,8 @@ class ArgoverseInMem(InMemoryDataset):
             valid_len.append(cluster.max())
             candidate_len.append(len(raw_data['CANDIDATES'].values[0]))
         index_to_pad = np.max(valid_len)
-        # candidate_len_max = np.max(candidate_len)
-        candidate_len_max = 702
+        candidate_len_max = np.max(candidate_len)
+        # candidate_len_max = 702
         print("[Argoverse]: The longest valid length is {}.".format(index_to_pad))
         print("[Argoverse]: The mean of valid length is {}.".format(np.mean(valid_len)))
 
@@ -262,24 +263,25 @@ if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0722"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0727"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
-    # for folder in ["train", "val"]:
-    for folder in ["val"]:
+    for folder in ["train", "val"]:
+    # for folder in ["val"]:
         dataset_input_path = os.path.join(
             # INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
             INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         # dataset = Argoverse(dataset_input_path)
         dataset = ArgoverseInMem(dataset_input_path)
-        batch_iter = DataLoader(dataset, batch_size=8, num_workers=8, shuffle=True, pin_memory=True)
+        batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=True)
         for k in range(3):
             for i, data in enumerate(tqdm(batch_iter, total=len(batch_iter), bar_format="{l_bar}{r_bar}")):
                 pass
 
             # print("{}".format(i))
-            # candit_gt = data.candidate_gt
+            candit_len = data.candidate_len_max[0]
+            print(candit_len)
             # target_candite = data.candidate[candit_gt.squeeze(0).bool()]
             # try:
             #     # loss = torch.nn.functional.binary_cross_entropy(candit_gt, candit_gt)

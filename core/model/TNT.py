@@ -25,7 +25,6 @@ class TNT(nn.Module):
                  global_graph_width=64,
                  with_aux=False,
                  aux_width=64,
-                 n=702,
                  target_pred_hid=64,
                  m=50,
                  motion_esti_hid=64,
@@ -62,7 +61,6 @@ class TNT(nn.Module):
         """
         super(TNT, self).__init__()
         self.horizon = horizon
-        self.n = n
         self.m = m
         self.k = k
 
@@ -89,7 +87,6 @@ class TNT(nn.Module):
         self.target_pred_layer = TargetPred(
             in_channels=global_graph_width,
             hidden_dim=target_pred_hid,
-            n=n,
             m=m,
             device=device
         )
@@ -118,7 +115,8 @@ class TNT(nn.Module):
         :param data: observed sequence data
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.n, 2)    # [batch_size, N, 2]
+        n = data.candidate_len_max[0]
+        target_candidate = data.candidate.view(-1, n, 2)    # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]
@@ -146,7 +144,9 @@ class TNT(nn.Module):
         :param reduction: reduction method, "mean", "sum"
         :return:
         """
-        target_candidate = data.candidate.view(-1, self.n, 2)   # [batch_size, N, 2]
+        n = data.candidate_len_max[0]
+
+        target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
         global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
@@ -160,7 +160,7 @@ class TNT(nn.Module):
         candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
         # add the target prediction loss
-        candidate_gt, offset_gt = candidate_gt.view(-1, self.n), offset_gt.view(-1, 2)
+        candidate_gt, offset_gt = candidate_gt.view(-1, n), offset_gt.view(-1, 2)
         target_loss = self.target_pred_layer.loss(
             target_feat,
             target_candidate,
@@ -260,14 +260,13 @@ if __name__ == "__main__":
     dataset = ArgoverseInMem(TRAIN_DIR)
     data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16, pin_memory=True)
 
-    n = 1000
     m = 50
     k = 6
 
     device = torch.device("cuda:1")
     # device = torch.device("cpu")
 
-    model = TNT(in_channels=10, n=n, m=m, k=k, with_aux=True, device=device).to(device)
+    model = TNT(in_channels=10, m=m, k=k, with_aux=True, device=device).to(device)
     model.train()
 
     for i, data in enumerate(tqdm(data_iter)):

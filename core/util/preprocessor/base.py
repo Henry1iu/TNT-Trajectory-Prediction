@@ -1,11 +1,13 @@
 # About:    superclass for data preprocessor
 # Author:   Jianbang LIU
 # Date:     2021.01.30
-
+import copy
 import os
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 
+from argoverse.utils.mpl_plotting_utils import visualize_centerline
 
 class Preprocessor(object):
     """
@@ -133,7 +135,7 @@ class Preprocessor(object):
 
     # todo: implement a candidate sampling with equal distance;
     @staticmethod
-    def lane_candidate_sampling(centerline_list, distance=0.5):
+    def lane_candidate_sampling(centerline_list, distance=0.5, viz=False):
         """the input are list of lines, each line containing"""
         candidates = []
         for line in centerline_list:
@@ -146,16 +148,30 @@ class Preprocessor(object):
                 candidates.append(line[i])
 
                 # compute displacement along each coordinate
-                d_x = distance * (y_diff / np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps))
-                d_y = distance * (x_diff / np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps))
+                den = np.hypot(x_diff, y_diff) + np.finfo(float).eps
+                d_x = distance * (x_diff / den)
+                d_y = distance * (y_diff / den)
 
-                num_c = np.floor(np.sqrt(x_diff ** 2 + y_diff ** 2 + np.finfo(float).eps) / distance).astype(np.int)
-                pt = line[i]
-                for _ in range(num_c):
+                num_c = np.floor(den / distance).astype(np.int)
+                pt = copy.deepcopy(line[i])
+                for j in range(num_c):
                     pt += np.array([d_x, d_y])
-                    candidates.append(pt)
+                    candidates.append(copy.deepcopy(pt))
+        candidates = np.unique(np.asarray(candidates), axis=0)
 
-        return np.unique(np.asarray(candidates), axis=0)
+        if viz:
+            fig = plt.figure(0, figsize=(8, 7))
+            fig.clear()
+            for centerline_coords in centerline_list:
+                visualize_centerline(centerline_coords)
+            plt.scatter(candidates[:, 0], candidates[:, 1], marker="*", c="g", alpha=1, s=6.0, zorder=15)
+            plt.xlabel("Map X")
+            plt.ylabel("Map Y")
+            plt.axis("off")
+            plt.title("No. of lane candidates = {}; No. of target candidates = {};".format(len(centerline_list), len(candidates)))
+            plt.show(block=False)
+
+        return candidates
 
     @staticmethod
     def get_candidate_gt(target_candidate, gt_target):
@@ -172,6 +188,34 @@ class Preprocessor(object):
 
         offset_xy = gt_target - target_candidate[gt_index]
         return onehot, offset_xy
+
+    @staticmethod
+    def plot_target_candidates(candidate_centerlines, traj_obs, traj_fut, candidate_targets):
+        fig = plt.figure(1, figsize=(8, 7))
+        fig.clear()
+
+        # plot centerlines
+        for centerline_coords in candidate_centerlines:
+            visualize_centerline(centerline_coords)
+
+        # plot traj
+        plt.plot(traj_obs[:, 0], traj_obs[:, 1], "x-", color="#d33e4c", alpha=1, linewidth=1, zorder=15)
+        # plot end point
+        plt.plot(traj_obs[-1, 0], traj_obs[-1, 1], "o", color="#d33e4c", alpha=1, markersize=6, zorder=15)
+        # plot future traj
+        plt.plot(traj_fut[:, 0], traj_fut[:, 1], "+-", color="b", alpha=1, linewidth=1, zorder=15)
+
+        # plot target sample
+        plt.scatter(candidate_targets[:, 0], candidate_targets[:, 1], marker="*", c="green", alpha=1, s=6, zorder=15)
+
+        plt.xlabel("Map X")
+        plt.ylabel("Map Y")
+        plt.axis("off")
+        plt.title("No. of lane candidates = {}; No. of target candidates = {};".format(len(candidate_centerlines),
+                                                                                       len(candidate_targets)))
+        # plt.show(block=False)
+        # plt.pause(0.01)
+        plt.show()
 
 
 # example of preprocessing scripts

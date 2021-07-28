@@ -100,13 +100,17 @@ class Trainer(object):
         self.log_freq = log_freq
         self.verbose = verbose
 
-        gc.collect()
+        gc.enable()
 
     def train(self, epoch):
+        gc.collect()
+
         self.model.train()
         return self.iteration(epoch, self.train_loader)
 
     def eval(self, epoch):
+        gc.collect()
+
         self.model.eval()
         return self.iteration(epoch, self.eval_loader)
 

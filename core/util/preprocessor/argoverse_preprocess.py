@@ -494,7 +494,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0722"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0727"
     argoverse_processor = ArgoversePreprocessor(raw_dir)
 
     if not DEBUG:

@@ -8,8 +8,11 @@ import copy
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
+from matplotlib import pyplot as plt
 from scipy import sparse
+
+import warnings
+warnings.filterwarnings("ignore")
 
 # import torch
 
@@ -114,10 +117,15 @@ class ArgoversePreprocessor(Preprocessor):
 
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
-        agt_traj_fut = data['trajs'][0][self.obs_horizon:self.pred_horizon].copy().astype(np.float32)
-        ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'], viz=True)
-        tar_candts = self.lane_candidate_sampling(ctr_line_candts)
+        agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
+        ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
+        tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
         candts_gt, offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
+
+        # self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
+
+        if not np.all(offse_gt < self.LANE_WIDTH[data['city']]):
+            self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
 
         feats, ctrs, gt_preds, has_preds = [], [], [], []
         for traj, step in zip(data['trajs'], data['steps']):
@@ -174,7 +182,7 @@ class ArgoversePreprocessor(Preprocessor):
 
         data['has_preds'] = has_preds
         data['gt_preds'] = gt_preds
-        data['tar_candts'] = tar_candts
+        data['tar_candts'] = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
         data['gt_candts'] = candts_gt
         data['gt_offset'] = offse_gt
         return data
