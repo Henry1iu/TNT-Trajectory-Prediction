@@ -3,12 +3,14 @@
 # Date: 2021.01.30
 
 import os
+import copy
 from os.path import join as pjoin
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+
+from torch.utils.data import Dataset, DataLoader
 
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
@@ -20,39 +22,37 @@ DEBUG = True
 
 
 class ArgoversePreprocessor(Preprocessor):
-    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=50):
-        super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range)
+    def __init__(self,
+                 root_dir,
+                 split="train",
+                 algo="tnt",
+                 obs_horizon=20,
+                 obs_range=100,
+                 pred_horizon=30,
+                 save_dir=None):
+        super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range, pred_horizon)
 
-        self.obs_horizon = obs_horizon
-        self.obs_range = obs_range
         self.LANE_WIDTH = {'MIA': 3.84, 'PIT': 3.97}
         self.COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#d3e8ef", "AV": "#007672"}
 
-        content = os.listdir(self.root_dir)
-        self.folders = [folder for folder in content if os.path.isdir(pjoin(self.root_dir, folder))]
+        self.split = split
 
         self.map = ArgoverseMap()
-        self.loaders = []
-        for folder in self.folders:
-            self.loaders.append(ArgoverseForecastingLoader(pjoin(self.root_dir, folder)))
+        self.loader = ArgoverseForecastingLoader(pjoin(self.root_dir, self.split+"_obs" if split == "test" else split))
+
+        self.save_dir = save_dir
+
+    def __getitem__(self, idx):
+        f_path = self.loader.seq_list[idx]
+        seq = self.loader.get(f_path)
+        path, seq_f_name_ext = os.path.split(f_path)
+        seq_f_name, ext = os.path.splitext(seq_f_name_ext)
+
+        df = copy.deepcopy(seq.seq_df)
+        return self.process_and_save(df, file_name=seq_f_name, dir_=self.save_dir)
 
     def __len__(self):
-        num_seq = 0
-        for loader in self.loaders:
-            num_seq += len(loader.seq_list)
-        return num_seq
-
-    def generate(self):
-        for i, loader in enumerate(self.loaders):
-            # add for debug
-            if "test" in self.folders[i] and DEBUG:
-                continue
-            for f_path in tqdm(loader.seq_list, desc=f"Processing {self.folders[i]}..."):
-                seq = loader.get(f_path)
-                path, seq_f_name_ext = os.path.split(f_path)
-                seq_f_name, ext = os.path.splitext(seq_f_name_ext)
-
-                yield self.folders[i], seq_f_name, seq.seq_df
+        return len(self.loader)
 
     def process(self, dataframe: pd.DataFrame, map_feat=True):
         agent_feats, obj_feats, lane_feats = self.extract_feature(dataframe, map_feat=map_feat)
@@ -392,32 +392,6 @@ class ArgoversePreprocessor(Preprocessor):
             halluc_lane_2 = np.vstack((halluc_lane_2, lane_2))
         return halluc_lane_1, halluc_lane_2
 
-    # def __get_lane_ids_base_traj(self, traj_df, lane_radius=20.0):
-    #     """
-    #     get corresponding lane ids based on trajectory
-    #     :param traj_df: DataFrame, trajectory dataframe
-    #     :param lane_radius: float, the radius to include the lane
-    #     :return: np.array, the related lane ids
-    #     """
-    #     # todo: change the get lane ids method to fit varaible traj length
-    #     # get lane ids at the start
-    #     traj_len = traj_df.shape[0]
-    #
-    #     city_name = traj_df["CITY_NAME"].values[0]
-    #     query_x, query_y = traj_df[['X', 'Y']].values[0]
-    #     lane_ids_str = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
-    #
-    #     # get lane ids in the middle
-    #     query_x, query_y = traj_df[['X', 'Y']].values[int(traj_len / 2)]
-    #     lane_ids_mid = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
-    #
-    #     # get lane ids at the end
-    #     query_x, query_y = traj_df[['X', 'Y']].values[-1]
-    #     lane_ids_end = self.map.get_lane_ids_in_xy_bbox(query_x, query_y, city_name, lane_radius)
-    #
-    #     # merge all the lane ids and remove duplicate
-    #     return np.unique(lane_ids_str + lane_ids_mid + lane_ids_end)
-
     def __get_lane_ids_base_traj(self, traj_df):
         """
         get corresponding lane ids based on trajectory, calling argoverse api
@@ -435,30 +409,6 @@ class ArgoversePreprocessor(Preprocessor):
         for lane_seg in lane_seg_list:
             lane_ids.extend(lane_seg)
         return np.unique(lane_ids)
-
-    # def __get_candidate_sampling(self, agent_df, n=1000):
-    #     # get the agent lane ids
-    #     ids = self.__get_lane_ids_base_traj(agent_df)
-    #
-    #     # get the centerlines
-    #     city_name = agent_df["CITY_NAME"].values[0]
-    #     centerline_list = []
-    #     centerline_cnt = 0
-    #     for idx in ids:
-    #         centerlines = self.map.get_lane_segment_centerline(idx, city_name=city_name)
-    #         centerline_cnt += centerlines.shape[0] - 1
-    #         centerline_list.append(centerlines)
-    #
-    #     # assign the number of sampling in each centerline
-    #     candidates = np.empty((0, 2))
-    #     for i, centerlines in enumerate(centerline_list):
-    #         if i == len(centerline_list) - 1:
-    #             candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n - candidates.shape[0])])
-    #         else:
-    #             n_sub = int(n * (centerlines.shape[0] - 1) / centerline_cnt)
-    #             candidates = np.vstack([candidates, self.lane_candidate_sampling(centerlines, n_sub)])
-    #     assert candidates.shape[0] == n, "[ArgoversePreprocessor]: The number of generated candidates are not {}".format(n)
-    #     return candidates
 
     def __get_candidate_sampling(self, agent_df, distance=0.5):
         # get the centerlines
@@ -485,25 +435,24 @@ class ArgoversePreprocessor(Preprocessor):
 
         return offset_gt
 
-    def process_and_save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None, map_feat=True):
-        enc_df = self.process(dataframe, map_feat)
-        self.save(enc_df, set_name, file_name, dir_)
-
 
 if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0727"
-    argoverse_processor = ArgoversePreprocessor(raw_dir)
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0801"
 
-    if not DEBUG:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            for s_name, f_name, df in argoverse_processor.generate():
-                executor.submit(argoverse_processor.process_and_save, df, s_name, f_name, interm_dir)
+    for split in ["train", "val"]:
+        # construct the preprocessor and dataloader
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
+        loader = DataLoader(argoverse_processor,
+                            batch_size=16,
+                            num_workers=16,
+                            shuffle=False,
+                            pin_memory=False,
+                            drop_last=False)
 
-    else:
-        for s_name, f_name, df in argoverse_processor.generate():
-            argoverse_processor.process_and_save(df, s_name, f_name, interm_dir)
+        for i, data in enumerate(tqdm(loader)):
+            pass
 
 

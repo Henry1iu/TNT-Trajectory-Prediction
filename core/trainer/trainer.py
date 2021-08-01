@@ -168,7 +168,7 @@ class Trainer(object):
         # save best metric
         self.best_metric = metric
         metric_stored_file = os.path.join(self.save_folder, "{}_metrics.txt".format(prefix))
-        with open(metric_stored_file, 'w+') as f:
+        with open(metric_stored_file, 'a+') as f:
             f.write(json.dumps(self.best_metric))
 
         # save model

@@ -5,28 +5,35 @@ import copy
 import os
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from matplotlib import pyplot as plt
+
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 from argoverse.utils.mpl_plotting_utils import visualize_centerline
 
-class Preprocessor(object):
+
+class Preprocessor(Dataset):
     """
     superclass for all the trajectory data preprocessor
     those preprocessor will reformat the data in a single sequence and feed to the system or store them
     """
-    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=30):
-        self.root_dir = root_dir    # root directory stored the dataset
+    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=30, pred_horizon=30):
+        self.root_dir = root_dir            # root directory stored the dataset
 
-        self.algo = algo            # the name of the algorithm
-        self.obs_horizon = 20       # the number of timestampe for observation
-        self.obs_range = 30         # the observation range
+        self.algo = algo                    # the name of the algorithm
+        self.obs_horizon = obs_horizon      # the number of timestampe for observation
+        self.obs_range = obs_range          # the observation range
+        self.pred_horizon = pred_horizon    # the number of timestamp for prediction
+
+        self.split = None
+
+    def __getitem__(self, idx):
+        raise NotImplementedError
 
     def __len__(self):
         """ the total number of sequence in the dataset """
-        raise NotImplementedError
-
-    def generate(self):
-        """ Generator function to iterating the dataset """
         raise NotImplementedError
 
     def process(self, dataframe: pd.DataFrame, map_feat=True):
@@ -55,7 +62,7 @@ class Preprocessor(object):
         """
         raise NotImplementedError
 
-    def save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None):
+    def save(self, dataframe: pd.DataFrame, file_name, dir_=None):
         """
         save the feature in the data sequence in a single csv files
         :param dataframe: DataFrame, the dataframe encoded
@@ -68,9 +75,9 @@ class Preprocessor(object):
             return
 
         if not dir_:
-            dir_ = os.path.join(os.path.split(self.root_dir)[0], "intermediate", set_name + "_intermediate", "raw")
+            dir_ = os.path.join(os.path.split(self.root_dir)[0], "intermediate", self.split + "_intermediate", "raw")
         else:
-            dir_ = os.path.join(dir_, set_name + "_intermediate", "raw")
+            dir_ = os.path.join(dir_, self.split + "_intermediate", "raw")
         if not os.path.exists(dir_):
             os.makedirs(dir_)
 
@@ -78,7 +85,7 @@ class Preprocessor(object):
         dataframe.to_pickle(os.path.join(dir_, fname))
         # print("[Preprocessor]: Saving data to {} with name: {}...".format(dir_, fname))
 
-    def process_and_save(self, dataframe: pd.DataFrame, set_name, file_name, dir_=None, map_feat=True):
+    def process_and_save(self, dataframe: pd.DataFrame, file_name, dir_=None, map_feat=True):
         """
         save the feature in the data sequence in a single csv files
         :param dataframe: DataFrame, the data frame
@@ -87,8 +94,10 @@ class Preprocessor(object):
         :param dir_: str, the directory to store the csv file
         :return:
         """
-        df = self.process(dataframe, map_feat)
-        # self.save(df, set_name, file_name, dir_)
+        df_processed = self.process(dataframe, map_feat)
+        self.save(df_processed, file_name, dir_)
+
+        return []
 
     @staticmethod
     def uniform_candidate_sampling(sampling_range, rate=30):
@@ -101,41 +110,8 @@ class Preprocessor(object):
         x = np.linspace(-sampling_range, sampling_range, rate)
         return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
 
-    # @staticmethod
-    # def lane_candidate_sampling(centerlines, n):
-    #     """
-    #     get sampling on the input centerlines
-    #     :param centerlines: np.array[lines, :]
-    #     :param n: the number of candiates
-    #     """
-    #     n_segment = centerlines.shape[0] - 1
-    #
-    #     rate = n // n_segment
-    #     n_mod = n % n_segment
-    #
-    #     candidates = []
-    #     if rate > 0:
-    #         for i in range(n_segment):
-    #             if i < n_mod:       # the rate is acturally rate + 1
-    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
-    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
-    #                 candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate + 1)])
-    #             else:               # the rate is rate
-    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / rate
-    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / rate
-    #                 candidates.extend([[centerlines[i, 0] + dx * j, centerlines[i, 1] + dy * j] for j in range(rate)])
-    #         assert len(candidates) == n, "[Preprocessor]: The number of generated candidates are not {}".format(n)
-    #     else:
-    #         for i in range(n_segment):
-    #             if i < n_mod:       # the rate is acturally rate + 1
-    #                 dx = centerlines[i + 1, 0] - centerlines[i, 0] / (rate + 1)
-    #                 dy = centerlines[i + 1, 1] - centerlines[i, 1] / (rate + 1)
-    #                 candidates.extend([[centerlines[i, 0] + dx / 2, centerlines[i, 1] + dy / 2]])
-    #     return np.array(candidates)
-
-    # todo: implement a candidate sampling with equal distance;
-    @staticmethod
-    def lane_candidate_sampling(centerline_list, distance=0.5, viz=False):
+    # implement a candidate sampling with equal distance;
+    def lane_candidate_sampling(self, centerline_list, distance=0.5, viz=False):
         """the input are list of lines, each line containing"""
         candidates = []
         for line in centerline_list:
@@ -221,6 +197,15 @@ class Preprocessor(object):
 # example of preprocessing scripts
 if __name__ == "__main__":
     processor = Preprocessor("raw_data")
+    loader = DataLoader(processor,
+                        batch_size=16,
+                        num_workers=16,
+                        shuffle=False,
+                        pin_memory=False,
+                        drop_last=False)
 
-    for s_name, f_name, df in processor.generate():
-        processor.save(processor.process(df), s_name, f_name)
+    for i, data in enumerate(tqdm(loader)):
+        pass
+
+
+

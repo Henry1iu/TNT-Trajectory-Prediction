@@ -13,8 +13,9 @@ import torch
 from torch_geometric.data import Data, Dataset, InMemoryDataset, DataLoader
 # from torch.utils.data import DataLoader
 
-sys.path.append("core/dataloader")
 from core.dataloader.dataset import get_fc_edge_index
+
+sys.path.append("core/dataloader")
 
 
 class GraphData(Data):

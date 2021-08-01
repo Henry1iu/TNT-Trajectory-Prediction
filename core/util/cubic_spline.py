@@ -19,6 +19,8 @@ class Spline:
         self.x = x
         self.y = y
 
+        self.eps = np.finfo(float).eps
+
         self.nx = len(x)  # dimension of x
         h = np.diff(x)
 
@@ -33,8 +35,8 @@ class Spline:
 
         # calc spline coefficient b and d
         for i in range(self.nx - 1):
-            self.d.append((self.c[i + 1] - self.c[i]) / (3.0 * h[i]))
-            tb = (self.a[i + 1] - self.a[i]) / h[i] - h[i] * \
+            self.d.append((self.c[i + 1] - self.c[i]) / (3.0 * h[i] + self.eps))
+            tb = (self.a[i + 1] - self.a[i]) / (h[i] + self.eps) - h[i] * \
                 (self.c[i + 1] + 2.0 * self.c[i]) / 3.0
             self.b.append(tb)
 
@@ -117,8 +119,8 @@ class Spline:
         """
         B = np.zeros(self.nx)
         for i in range(self.nx - 2):
-            B[i + 1] = 3.0 * (self.a[i + 2] - self.a[i + 1]) / \
-                h[i + 1] - 3.0 * (self.a[i + 1] - self.a[i]) / h[i]
+            B[i + 1] = 3.0 * (self.a[i + 2] - self.a[i + 1]) / (h[i + 1] + self.eps) \
+                       - 3.0 * (self.a[i + 1] - self.a[i]) / (h[i] + self.eps)
         return B
 
 
@@ -127,10 +129,16 @@ class Spline2D:
     2D Cubic Spline class
     """
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, resolution=0.1):
         self.s = self.__calc_s(x, y)
         self.sx = Spline(self.s, x)
         self.sy = Spline(self.s, y)
+
+        self.s_fine = np.arange(0, self.s[-1], resolution)
+        xy = np.array([self.calc_global_position_online(s_i) for s_i in self.s_fine])
+
+        self.x_fine = xy[:, 0]
+        self.y_fine = xy[:, 1]
 
     def __calc_s(self, x, y):
         dx = np.diff(x)
@@ -140,14 +148,47 @@ class Spline2D:
         s.extend(np.cumsum(self.ds))
         return s
 
-    def calc_position(self, s):
+    def calc_global_position_online(self, s):
         """
-        calc position
+        calc global position of points on the line, s: float
+        return: x: float; y: float; the global coordinate of given s on the spline
         """
         x = self.sx.calc(s)
         y = self.sy.calc(s)
 
         return x, y
+
+    def calc_global_position_offline(self, s, d):
+        """
+        calc global position of points in the frenet coordinate w.r.t. the line.
+        s: float, longitudinal; d: float, lateral;
+        return: x, float; y, float;
+        """
+        s_x = self.sx.calc(s)
+        s_y = self.sy.calc(s)
+
+        theta = math.atan2(self.sy.calcd(s), self.sx.calcd(s))
+        x = s_x - math.sin(theta) * d
+        y = s_y + math.cos(theta) * d
+        return x, y
+
+    def calc_frenet_position(self, x, y):
+        """
+        cal the frenet position of given global coordinate (x, y)
+        return s: the longitudinal; d: the lateral
+        """
+        # find nearst x, y
+        diff = np.hypot(self.x_fine - x, self.y_fine - y)
+        idx = np.argmin(diff)
+        [x_s, y_s] = self.x_fine[idx], self.y_fine[idx]
+        s = self.s_fine[idx]
+
+        # compute theta
+        theta = math.atan2(self.sy.calcd(s), self.sx.calcd(s))
+        d_x, d_y = x - x_s, y - y_s
+        cross_rd_nd = math.cos(theta) * d_y - math.sin(theta) * d_x
+        d = math.copysign(np.hypot(d_x, d_y), cross_rd_nd)
+        return s, d
 
     def calc_curvature(self, s):
         """
@@ -176,7 +217,7 @@ def calc_spline_course(x, y, ds=0.1):
 
     rx, ry, ryaw, rk = [], [], [], []
     for i_s in s:
-        ix, iy = sp.calc_position(i_s)
+        ix, iy = sp.calc_global_position_online(i_s)
         rx.append(ix)
         ry.append(iy)
         ryaw.append(sp.calc_yaw(i_s))
@@ -188,8 +229,14 @@ def calc_spline_course(x, y, ds=0.1):
 def main():  # pragma: no cover
     print("Spline 2D test")
     import matplotlib.pyplot as plt
-    x = [-2.5, 0.0, 2.5, 5.0, 7.5, 3.0, -1.0]
-    y = [0.7, -6, 5, 6.5, 0.0, 5.0, -2.0]
+    # x = [-2.5, 0.0, 2.5, 5.0, 7.5, 3.0, -1.0]
+    # y = [0.7, -6, 5, 6.5, 0.0, 5.0, -2.0]
+    x = [float(i) for i in range(30)]
+    y = [float(0.0) for i in range(30)]
+    for i in range(len(y)):
+        if i % 2 == 0.0:
+            y[i] = float(i)
+
     ds = 0.1  # [m] distance of each intepolated points
 
     sp = Spline2D(x, y)
@@ -197,7 +244,7 @@ def main():  # pragma: no cover
 
     rx, ry, ryaw, rk = [], [], [], []
     for i_s in s:
-        ix, iy = sp.calc_position(i_s)
+        ix, iy = sp.calc_global_position_online(i_s)
         rx.append(ix)
         ry.append(iy)
         ryaw.append(sp.calc_yaw(i_s))

@@ -12,59 +12,63 @@ from matplotlib import pyplot as plt
 from scipy import sparse
 
 import warnings
-warnings.filterwarnings("ignore")
 
 # import torch
+from torch.utils.data import Dataset, DataLoader
 
 from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
 from argoverse.map_representation.map_api import ArgoverseMap
 from argoverse.visualization.visualize_sequences import viz_sequence
+from argoverse.utils.mpl_plotting_utils import visualize_centerline
 
 from core.util.preprocessor.base import Preprocessor
+from core.util.cubic_spline import Spline2D
+
+warnings.filterwarnings("ignore")
 
 
 class ArgoversePreprocessor(Preprocessor):
-    def __init__(self, root_dir, algo="tnt", obs_horizon=20, obs_range=35, pred_horizon=30):
-        super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range)
+    def __init__(self,
+                 root_dir,
+                 split="train",
+                 algo="tnt",
+                 obs_horizon=20,
+                 obs_range=100,
+                 pred_horizon=30,
+                 save_dir=None):
+        super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range, pred_horizon)
 
-        self.obs_horizon = obs_horizon
-        self.obs_range = obs_range
-        self.pred_horizon = pred_horizon
         self.LANE_WIDTH = {'MIA': 3.84, 'PIT': 3.97}
         self.COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#d3e8ef", "AV": "#007672"}
 
-        content = os.listdir(self.root_dir)
-        self.folders = [folder for folder in content if os.path.isdir(pjoin(self.root_dir, folder))]
+        self.split = split
 
         self.am = ArgoverseMap()
-        self.loaders = []
-        for folder in self.folders:
-            self.loaders.append(ArgoverseForecastingLoader(pjoin(self.root_dir, folder)))
+        self.loader = ArgoverseForecastingLoader(pjoin(self.root_dir, self.split+"_obs" if split == "test" else split))
 
-    def generate(self):
-        for i, loader in enumerate(self.loaders):
-            # add for debug
-            if "test" in self.folders[i]:
-                continue
-            for f_path in tqdm(loader.seq_list, desc=f"Processing {self.folders[i]}..."):
-                seq = loader.get(f_path)
-                path, seq_f_name_ext = os.path.split(f_path)
-                seq_f_name, ext = os.path.splitext(seq_f_name_ext)
+        self.save_dir = save_dir
 
-                yield self.folders[i], seq_f_name, copy.deepcopy(seq.seq_df)
+    def __getitem__(self, idx):
+        f_path = self.loader.seq_list[idx]
+        seq = self.loader.get(f_path)
+        path, seq_f_name_ext = os.path.split(f_path)
+        seq_f_name, ext = os.path.splitext(seq_f_name_ext)
+
+        df = copy.deepcopy(seq.seq_df)
+        return self.process_and_save(df, file_name=seq_f_name, dir_=self.save_dir)
 
     def process(self, dataframe: pd.DataFrame,  map_feat=True):
         data = self.read_argo_data(dataframe)
         data = self.get_obj_feats(data)
 
         data['graph'] = self.get_lane_graph(data)
+
+        # visualization for debug purpose
+        # self.visualize_data(data)
         return data
 
     def __len__(self):
-        num_seq = 0
-        for loader in self.loaders:
-            num_seq += len(loader.seq_list)
-        return num_seq
+        return len(self.loader)
 
     @staticmethod
     def read_argo_data(df: pd.DataFrame):
@@ -109,7 +113,7 @@ class ArgoversePreprocessor(Preprocessor):
     def get_obj_feats(self, data):
         # get the origin and compute the oritentation of the target agent
         orig = data['trajs'][0][self.obs_horizon-1].copy().astype(np.float32)
-        pre = data['trajs'][0][self.obs_horizon-2] - orig
+        pre = (data['trajs'][0][self.obs_horizon-3] - orig) / 2.0
         theta = np.pi - np.arctan2(pre[1], pre[0])
         rot = np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -119,72 +123,96 @@ class ArgoversePreprocessor(Preprocessor):
         agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
         agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
         ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
+
+        # rotate the center lines and find the reference center line
+        agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
+        for i, _ in enumerate(ctr_line_candts):
+            ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
+        splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
+
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
-        candts_gt, offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
+        tar_candts_gt, tar_offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
 
         # self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
+        # if not np.all(offse_gt < self.LANE_WIDTH[data['city']]):
+        #     self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
 
-        if not np.all(offse_gt < self.LANE_WIDTH[data['city']]):
-            self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
-
-        feats, ctrs, gt_preds, has_preds = [], [], [], []
+        feats, ctrs, has_obss, gt_preds, has_preds = [], [], [], [], []
+        x_min, x_max, y_min, y_max = -self.obs_range, self.obs_range, -self.obs_range, self.obs_range
         for traj, step in zip(data['trajs'], data['steps']):
             if self.obs_horizon-1 not in step:
                 continue
 
+            # normalize and rotate
+            traj_nd = np.matmul(rot, (traj - orig.reshape(-1, 2)).T).T
+
+            # collect the future prediction ground truth
             gt_pred = np.zeros((self.pred_horizon, 2), np.float32)
             has_pred = np.zeros(self.pred_horizon, np.bool)
             future_mask = np.logical_and(step >= self.obs_horizon, step < self.obs_horizon + self.pred_horizon)
             post_step = step[future_mask] - self.obs_horizon
-            post_traj = traj[future_mask]
+            post_traj = traj_nd[future_mask]
             gt_pred[post_step] = post_traj
-            has_pred[post_step] = 1
+            has_pred[post_step] = True
 
+            # colect the observation
             obs_mask = step < self.obs_horizon
-            step = step[obs_mask]
-            traj = traj[obs_mask]
-            idcs = step.argsort()
-            step = step[idcs]
-            traj = traj[idcs]
+            step_obs = step[obs_mask]
+            traj_obs = traj_nd[obs_mask]
+            idcs = step_obs.argsort()
+            step_obs = step_obs[idcs]
+            traj_obs = traj_obs[idcs]
 
-            for i in range(len(step)):
-                # if step[i] == 19 - (len(step) - 1) + i:
-                if step[i] == self.obs_horizon - len(step) + i:
+            for i in range(len(step_obs)):
+                if step_obs[i] == self.obs_horizon - len(step_obs) + i:
                     break
-            step = step[i:]
-            traj = traj[i:]
+            step_obs = step_obs[i:]
+            traj_obs = traj_obs[i:]
 
             feat = np.zeros((self.obs_horizon, 3), np.float32)
-            feat[step, :2] = np.matmul(rot, (traj - orig.reshape(-1, 2)).T).T
-            feat[step, 2] = 1.0
+            has_obs = np.zeros(self.obs_horizon, np.bool)
 
-            x_min, x_max, y_min, y_max = -self.obs_range, self.obs_range, -self.obs_range, self.obs_range
+            feat[step_obs, :2] = traj_obs
+            feat[step_obs, 2] = 1.0
+            has_obs[step_obs] = True
+
             if feat[-1, 0] < x_min or feat[-1, 0] > x_max or feat[-1, 1] < y_min or feat[-1, 1] > y_max:
                 continue
 
-            ctrs.append(feat[-1, :2].copy())
-            feat[1:, :2] -= feat[:-1, :2]
-            feat[step[0], :2] = 0
-            feats.append(feat)
+            feats.append(feat)                  # displacement vectors
+            has_obss.append(has_obs)
             gt_preds.append(gt_pred)
             has_preds.append(has_pred)
 
         feats = np.asarray(feats, np.float32)
-        ctrs = np.asarray(ctrs, np.float32)
+        has_obss = np.asarray(has_obss, np.bool)
         gt_preds = np.asarray(gt_preds, np.float32)
         has_preds = np.asarray(has_preds, np.bool)
 
-        data['feats'] = feats
-        data['ctrs'] = ctrs
+        # plot the splines
+        # self.plot_reference_centerlines(ctr_line_candts, splines, feats[0], gt_preds[0], ref_idx)
+
+        # # target candidate filtering
+        tar_candts = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
+        # inlier = np.logical_and(np.fabs(tar_candts[:, 0]) <= self.obs_range, np.fabs(tar_candts[:, 1]) <= self.obs_range)
+        # if not np.any(candts_gt[inlier]):
+        #     raise Exception("The gt of target candidate exceeds the observation range!")
+
         data['orig'] = orig
         data['theta'] = theta
         data['rot'] = rot
 
+        data['feats'] = feats
+        data['has_obss'] = has_obss
+
         data['has_preds'] = has_preds
         data['gt_preds'] = gt_preds
-        data['tar_candts'] = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
-        data['gt_candts'] = candts_gt
-        data['gt_offset'] = offse_gt
+        data['tar_candts'] = tar_candts
+        data['gt_candts'] = tar_candts_gt
+        data['gt_tar_offset'] = tar_offse_gt
+
+        data['ref_ctr_lines'] = splines         # the reference candidate centerlines Spline for prediction
+        data['ref_cetr_idx'] = ref_idx          # the idx of the closest reference centerlines
         return data
 
     def get_lane_graph(self, data):
@@ -255,6 +283,96 @@ class ArgoversePreprocessor(Preprocessor):
 
         return graph
 
+    def visualize_data(self, data):
+        """
+        visualize the extracted data, and exam the data
+        """
+        fig = plt.figure(0, figsize=(8, 7))
+        fig.clear()
+
+        # visualize the centerlines
+        lines_ctrs = data['graph']['ctrs']
+        lines_feats = data['graph']['feats']
+        lane_idcs = data['graph']['lane_idcs']
+        for i in np.unique(lane_idcs):
+            line_ctr = lines_ctrs[lane_idcs == i]
+            line_feat = lines_feats[lane_idcs == i]
+            line_str = (2.0 * line_ctr - line_feat) / 2.0
+            line_end = (2.0 * line_ctr[-1, :] + line_feat[-1, :]) / 2.0
+            line = np.vstack([line_str, line_end.reshape(-1, 2)])
+            visualize_centerline(line)
+
+        # visualize the trajectory
+        trajs = data['feats'][:, :, :2]
+        has_obss = data['has_obss']
+        preds = data['gt_preds']
+        has_preds = data['has_preds']
+        for i, [traj, has_obs, pred, has_pred] in enumerate(zip(trajs, has_obss, preds, has_preds)):
+            self.plot_traj(traj[has_obs], pred[has_pred], i)
+
+        plt.xlabel("Map X")
+        plt.ylabel("Map Y")
+        plt.axis("off")
+        plt.show()
+        # plt.show(block=False)
+        # plt.pause(0.5)
+
+    @staticmethod
+    def get_ref_centerline(cline_list, pred_gt):
+        if len(cline_list) == 1:
+            return [Spline2D(x=cline_list[0][:, 0], y=cline_list[0][:, 1])], 0
+        else:
+            line_idx = 0
+            ref_centerlines = [Spline2D(x=cline_list[i][:, 0], y=cline_list[i][:, 1]) for i in range(len(cline_list))]
+
+            # search the closest point of the traj final position to each center line
+            min_distances = []
+            for line in ref_centerlines:
+                xy = np.stack([line.x_fine, line.y_fine], axis=1)
+                diff = xy - pred_gt[-1, :2]
+                dis = np.hypot(diff[:, 0], diff[:, 1])
+                min_distances.append(np.min(dis))
+            line_idx = np.argmin(min_distances)
+            return ref_centerlines, line_idx
+
+    def plot_reference_centerlines(self, cline_list, splines, obs, pred, ref_line_idx):
+        fig = plt.figure(0, figsize=(8, 7))
+        fig.clear()
+
+        for centerline_coords in cline_list:
+            visualize_centerline(centerline_coords)
+
+        for i, spline in enumerate(splines):
+            xy = np.stack([spline.x_fine, spline.y_fine], axis=1)
+            if i == ref_line_idx:
+                plt.plot(xy[:, 0], xy[:, 1], "--", color="r", alpha=0.7, linewidth=1, zorder=10)
+            else:
+                plt.plot(xy[:, 0], xy[:, 1], "--", color="b", alpha=0.5, linewidth=1, zorder=10)
+
+        self.plot_traj(obs, pred)
+
+        plt.xlabel("Map X")
+        plt.ylabel("Map Y")
+        plt.axis("off")
+        plt.show()
+        # plt.show(block=False)
+        # plt.pause(0.5)
+
+    def plot_traj(self, obs, pred, traj_id=None):
+        assert len(obs) != 0, "ERROR: The input trajectory is empty!"
+        traj_na = "t{}".format(traj_id) if traj_id else "traj"
+        obj_type = "AGENT" if traj_id == 0 else "OTHERS"
+
+        plt.plot(obs[:, 0], obs[:, 1], color=self.COLOR_DICT[obj_type], alpha=1, linewidth=1, zorder=15)
+        plt.plot(pred[:, 0], pred[:, 1], "d-", color=self.COLOR_DICT[obj_type], alpha=1, linewidth=1, zorder=15)
+
+        plt.text(obs[0, 0], obs[0, 1], "{}_s".format(traj_na))
+
+        if len(pred) == 0:
+            plt.text(obs[-1, 0], obs[-1, 1], "{}_e".format(traj_na))
+        else:
+            plt.text(pred[-1, 0], pred[-1, 1], "{}_e".format(traj_na))
+
 
 def ref_copy(data):
     if isinstance(data, list):
@@ -268,11 +386,21 @@ def ref_copy(data):
 
 
 if __name__ == "__main__":
+    # config path
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
     interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0717"
-    argoverse_processor = ArgoversePreprocessor(raw_dir)
 
-    for s_name, f_name, df in argoverse_processor.generate():
-            argoverse_processor.process_and_save(df, s_name, f_name, interm_dir)
+    for split in ["train", "val"]:
+        # construct the preprocessor and dataloader
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
+        loader = DataLoader(argoverse_processor,
+                            batch_size=16,
+                            num_workers=16,
+                            shuffle=False,
+                            pin_memory=False,
+                            drop_last=False)
+
+        for i, data in enumerate(tqdm(loader)):
+            pass

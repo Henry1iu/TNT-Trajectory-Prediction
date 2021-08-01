@@ -37,8 +37,8 @@ class GlobalGraph(nn.Module):
             # )
 
             self.layers.add_module(
-                f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
-                # f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
+                # f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
+                f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
             )
             in_channels = self.global_graph_width
 
