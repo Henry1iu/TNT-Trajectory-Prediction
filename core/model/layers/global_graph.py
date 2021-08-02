@@ -5,6 +5,7 @@ import random
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from torch_geometric.nn import MessagePassing, max_pool
 from torch_geometric.utils import add_self_loops, degree
@@ -37,14 +38,15 @@ class GlobalGraph(nn.Module):
             # )
 
             self.layers.add_module(
-                # f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
-                f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
+                # f'glp_{i}', SelfAttentionFCLayer(in_channels, self.global_graph_width)
+                f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
+                # f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
             )
             in_channels = self.global_graph_width
 
         # self.layers = nn.DataParallel(self.layers, device_ids=[1, 0])
 
-    def forward(self, global_data):
+    def forward(self, global_data, **kwargs):
         x, edge_index = global_data.x, global_data.edge_index
         valid_lens, time_step_len = global_data.valid_lens, int(global_data.time_step_len[0])
 
@@ -59,6 +61,9 @@ class GlobalGraph(nn.Module):
 
             elif isinstance(layer, TransformerConv):
                 x = layer(x, edge_index)
+
+            elif isinstance(layer, SelfAttentionFCLayer):
+                x = layer(x, valid_lens, **kwargs)
 
         return x
 
@@ -117,8 +122,7 @@ class SelfAttentionLayer(MessagePassing):
         else:
             shape = X.shape
             if valid_len.dim() == 1:
-                valid_len = torch.repeat_interleave(
-                    valid_len, repeats=shape[1], dim=0)
+                valid_len = torch.repeat_interleave(valid_len, repeats=shape[1], dim=0)
             else:
                 valid_len = valid_len.reshape(-1)
             # Fill masked elements with a large negative, whose exp is 0
@@ -142,12 +146,15 @@ class SelfAttentionFCLayer(nn.Module):
         self.scale_factor_d = 1 + \
             int(np.sqrt(self.in_channels)) if need_scale else 1
 
-    def forward(self, x, valid_len):
+    def forward(self, x, valid_len, batch_size):
         # print(x.shape)
         # print(self.q_lin)
+        x = x.view(batch_size, -1, self.in_channels)
+
         query = self.q_lin(x)
         key = self.k_lin(x)
         value = self.v_lin(x)
+        print("shape of key: {};".format(key.shape))
         scores = torch.bmm(query, key.transpose(1, 2))
         attention_weights = self.masked_softmax(scores, valid_len)
         return torch.bmm(attention_weights, value)
@@ -159,7 +166,7 @@ class SelfAttentionFCLayer(nn.Module):
             X: 3-D tensor, valid_len: 1-D or 2-D tensor
         """
         if valid_len is None:
-            return nn.functional.softmax(X, dim=-1)
+            return F.softmax(X, dim=-1)
         else:
             shape = X.shape
             if valid_len.dim() == 1:
@@ -167,10 +174,10 @@ class SelfAttentionFCLayer(nn.Module):
             else:
                 valid_len = valid_len.reshape(-1)
             # Fill masked elements with a large negative, whose exp is 0
-            X = X.reshape(-1, shape[-1])
+            X = X.view(-1, shape[-1])
             for count, row in enumerate(X):
                 row[int(valid_len[count]):] = -1e6
-            return nn.functional.softmax(X.reshape(shape), dim=-1)
+            return F.softmax(X.reshape(shape), dim=-1)
 
 
 if __name__ == "__main__":

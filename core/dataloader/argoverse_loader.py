@@ -225,6 +225,7 @@ class ArgoverseInMem(InMemoryDataset):
                 valid_len=torch.tensor([cluster.max()]),
                 time_step_len=torch.tensor([index_to_pad + 1]),
                 candidate_len_max=torch.tensor([candidate_len_max]).int(),
+                candidate_mask=[],
                 candidate=torch.from_numpy(candidate).float(),
                 candidate_gt=torch.from_numpy(gt_candidate).float(),
                 offset_gt=torch.from_numpy(gt_offset).float(),
@@ -254,9 +255,12 @@ class ArgoverseInMem(InMemoryDataset):
 
         # pad candidate and candidate_gt
         num_cand_max = data.candidate_len_max[0].item()
+        data.candidate_mask = torch.cat([torch.ones((len(data.candidate), 1)),
+                                         torch.zeros((num_cand_max - len(data.candidate), 1))])
         data.candidate = torch.cat([data.candidate, torch.zeros((num_cand_max - len(data.candidate), 2))])
         data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))])
-        return copy(data)
+
+        return data
 
 
 if __name__ == "__main__":

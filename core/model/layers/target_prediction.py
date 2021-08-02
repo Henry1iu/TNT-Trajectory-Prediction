@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
 
+from core.model.layers.utils import masked_softmax
+
 
 class TargetPred(nn.Module):
     def __init__(self,
@@ -44,7 +46,7 @@ class TargetPred(nn.Module):
         self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
         self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
 
-    def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor):
+    def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """
         predict the target end position of the target agent from the target candidates
         :param feat_in: the encoded trajectory features, [batch_size, inchannels]
@@ -63,8 +65,12 @@ class TargetPred(nn.Module):
         # print("feat_in_repeat size: ", feat_in_repeat.size())
 
         # compute probability for each candidate
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_repeat), dim=1).squeeze(-1)  # [batch_size, n_tar, 1]
-        tar_offset_mean = self.mean_mlp(feat_in_repeat)                                # [batch_size, n_tar, 2]
+        prob_tensor = self.prob_mlp(feat_in_repeat)
+        if not isinstance(candidate_mask, torch.Tensor):
+            tar_candit_prob = F.softmax(prob_tensor, dim=1).squeeze(-1)                         # [batch_size, n_tar, 1]
+        else:
+            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)    # [batch_size, n_tar, 1]
+        tar_offset_mean = self.mean_mlp(feat_in_repeat)                                         # [batch_size, n_tar, 2]
         # print("tar_candit_pro size: ", tar_candit_prob.size())
         # print("tar_offset_mean size: ", tar_offset_mean.size())
 
@@ -81,6 +87,7 @@ class TargetPred(nn.Module):
              tar_candidate: torch.Tensor,
              candidate_gt: torch.Tensor,
              offset_gt: torch.Tensor,
+             candidate_mask=None,
              reduction="mean"):
         """
         compute the loss for target prediction, classification gt is binary labels,
@@ -98,7 +105,14 @@ class TargetPred(nn.Module):
         # print("Shape of feat_in: {}".format(feat_in.shape))
         # print("Shape of tar_candidate: {}".format(tar_candidate.shape))
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, n, 1), tar_candidate], dim=2)
-        tar_candit_prob = F.softmax(self.prob_mlp(feat_in_prob), dim=1).squeeze(-1)               # [batch_size, n_tar]
+        prob_tensor = self.prob_mlp(feat_in_prob)
+        # print("prob_tensor size: {};".format(prob_tensor.shape))
+        if not isinstance(candidate_mask, torch.Tensor):
+            tar_candit_prob = F.softmax(prob_tensor, dim=1).squeeze(-1)                           # [batch_size, n_tar]
+        else:
+            # print("candidate_mask size: {}".format(candidate_mask.shape))
+            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)      # [batch_size, n_tar]
+        # print("tar_candit_prob: {};".format(tar_candit_prob.shape))
         # tar_candit_prob = self.prob_mlp(feat_in_prob).squeeze(-1)                               # [batch_size, n_tar]
 
         # classfication output

@@ -170,6 +170,7 @@ class Trainer(object):
         metric_stored_file = os.path.join(self.save_folder, "{}_metrics.txt".format(prefix))
         with open(metric_stored_file, 'a+') as f:
             f.write(json.dumps(self.best_metric))
+            f.write("\n")
 
         # save model
         torch.save(

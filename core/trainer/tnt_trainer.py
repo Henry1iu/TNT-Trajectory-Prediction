@@ -139,6 +139,17 @@ class TNTTrainer(Trainer):
                 n_graph = data.num_graphs
             else:
                 n_graph = len(data)
+            # ################################### DEBUG ################################### #
+            # if epoch > 0:
+            #     print("\nsize of x: {};".format(data.x.shape))
+            #     print("size of cluster: {};".format(data.cluster.shape))
+            #     print("valid_len: {};".format(data.valid_len))
+            #     print("time_step_len: {};".format(data.time_step_len))
+            #
+            #     print("size of candidate: {};".format(data.candidate.shape))
+            #     print("size of candidate_mask: {};".format(data.candidate_mask.shape))
+            #     print("candidate_len_max: {};".format(data.candidate_len_max))
+            # ################################### DEBUG ################################### #
 
             if training:
                 if self.multi_gpu:

@@ -125,8 +125,8 @@ class TNT(nn.Module):
         # predict the prob. of target candidates and selected the most likely M candidate
         target_pred, offset_pred = self.target_pred_layer(target_feat, target_candidate)
 
-        # DEBUG
-        gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1)
+        # # DEBUG
+        # gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1)
 
         # trajectory estimation for the m predicted target location
         traj_pred = self.motion_estimator(target_feat, target_pred+offset_pred)
@@ -161,11 +161,13 @@ class TNT(nn.Module):
 
         # add the target prediction loss
         candidate_gt, offset_gt = candidate_gt.view(-1, n), offset_gt.view(-1, 2)
+        candidate_mask = data.candidate_mask.view(-1, n)
         target_loss = self.target_pred_layer.loss(
             target_feat,
             target_candidate,
             candidate_gt,
             offset_gt,
+            candidate_mask=candidate_mask,
             reduction=reduction
         )
         loss += self.lambda1 * target_loss
@@ -181,7 +183,7 @@ class TNT(nn.Module):
         loss += self.lambda2 * traj_loss
 
         # add the score and selection loss
-        pred_tar, pred_offset = self.target_pred_layer(target_feat, target_candidate)
+        pred_tar, pred_offset = self.target_pred_layer(target_feat, target_candidate, candidate_mask)
         traj_pred = self.motion_estimator(target_feat, pred_tar+pred_offset)
         score_loss = self.traj_score_layer.loss(
             target_feat,
@@ -205,7 +207,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.004):
+    def traj_selection(self, traj_in, score, threshold=0.01):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
