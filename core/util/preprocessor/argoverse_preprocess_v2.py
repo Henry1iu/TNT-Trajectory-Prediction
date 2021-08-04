@@ -65,7 +65,10 @@ class ArgoversePreprocessor(Preprocessor):
 
         # visualization for debug purpose
         # self.visualize_data(data)
-        return data
+        return pd.DataFrame(
+            [[data[key] for key in data.keys()]],
+            columns=[key for key in data.keys()]
+        )
 
     def __len__(self):
         return len(self.loader)
@@ -169,6 +172,9 @@ class ArgoversePreprocessor(Preprocessor):
             step_obs = step_obs[i:]
             traj_obs = traj_obs[i:]
 
+            if len(step_obs) <= 1:
+                continue
+
             feat = np.zeros((self.obs_horizon, 3), np.float32)
             has_obs = np.zeros(self.obs_horizon, np.bool)
 
@@ -184,6 +190,9 @@ class ArgoversePreprocessor(Preprocessor):
             gt_preds.append(gt_pred)
             has_preds.append(has_pred)
 
+        # if len(feats) < 1:
+        #     raise Exception()
+
         feats = np.asarray(feats, np.float32)
         has_obss = np.asarray(has_obss, np.bool)
         gt_preds = np.asarray(gt_preds, np.float32)
@@ -193,7 +202,7 @@ class ArgoversePreprocessor(Preprocessor):
         # self.plot_reference_centerlines(ctr_line_candts, splines, feats[0], gt_preds[0], ref_idx)
 
         # # target candidate filtering
-        tar_candts = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
+        # tar_candts = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
         # inlier = np.logical_and(np.fabs(tar_candts[:, 0]) <= self.obs_range, np.fabs(tar_candts[:, 1]) <= self.obs_range)
         # if not np.any(candts_gt[inlier]):
         #     raise Exception("The gt of target candidate exceeds the observation range!")
@@ -390,7 +399,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0717"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0804"
 
     for split in ["train", "val"]:
         # construct the preprocessor and dataloader

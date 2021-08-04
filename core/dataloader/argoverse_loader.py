@@ -264,7 +264,6 @@ class ArgoverseInMem(InMemoryDataset):
 
 
 if __name__ == "__main__":
-    gc.collect()
 
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"

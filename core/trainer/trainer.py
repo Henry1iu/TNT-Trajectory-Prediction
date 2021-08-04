@@ -190,10 +190,10 @@ class Trainer(object):
         """
         if mode == 'c':
             # load ckpt
-            ckpt = torch.load(load_path)
+            ckpt = torch.load(load_path, map_location=self.device)
             try:
                 if self.multi_gpu:
-                    self.model.module.load_state_dict(ckpt["model_state_dict"])
+                    self.model.load_state_dict(ckpt["model_state_dict"])
                 else:
                     self.model.load_state_dict(ckpt["model_state_dict"])
                 self.optim.load_state_dict(ckpt["optimizer_state_dict"])
@@ -202,7 +202,7 @@ class Trainer(object):
                 raise Exception("[Trainer]: Error in loading the checkpoint file {}".format(load_path))
         elif mode == 'm':
             try:
-                self.model.load_state_dict(torch.load(load_path))
+                self.model.load_state_dict(torch.load(load_path, map_location=self.device))
             except:
                 raise Exception("[Trainer]: Error in loading the model file {}".format(load_path))
         else:

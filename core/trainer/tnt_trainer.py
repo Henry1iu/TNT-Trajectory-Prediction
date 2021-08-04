@@ -135,10 +135,11 @@ class TNTTrainer(Trainer):
         )
 
         for i, data in data_iter:
-            if not self.multi_gpu:
-                n_graph = data.num_graphs
-            else:
-                n_graph = len(data)
+            # if not self.multi_gpu:
+            #     n_graph = data.num_graphs
+            # else:
+            #     n_graph = len(data)
+            n_graph = data.num_graphs
             # ################################### DEBUG ################################### #
             # if epoch > 0:
             #     print("\nsize of x: {};".format(data.x.shape))

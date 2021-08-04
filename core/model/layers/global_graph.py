@@ -44,8 +44,6 @@ class GlobalGraph(nn.Module):
             )
             in_channels = self.global_graph_width
 
-        # self.layers = nn.DataParallel(self.layers, device_ids=[1, 0])
-
     def forward(self, global_data, **kwargs):
         x, edge_index = global_data.x, global_data.edge_index
         valid_lens, time_step_len = global_data.valid_lens, int(global_data.time_step_len[0])

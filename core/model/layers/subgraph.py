@@ -1,11 +1,11 @@
 # source: https://github.com/xk-huang/yet-another-vectornet
-
+import numpy as np
 import torch
 import torch.nn as nn
 
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, max_pool, avg_pool
-from torch_geometric.utils import add_self_loops
+from torch_geometric.utils import add_self_loops, remove_self_loops
 
 
 class SubGraph(nn.Module):
@@ -31,6 +31,7 @@ class SubGraph(nn.Module):
             sub_data (Data): [x, y, cluster, edge_index, valid_len]
         """
         x, edge_index = sub_data.x, sub_data.edge_index
+
         for name, layer in self.layer_seq.named_modules():
             if isinstance(layer, GraphLayerProp):
                 x = layer(x, edge_index)
@@ -38,6 +39,15 @@ class SubGraph(nn.Module):
         out_data = max_pool(sub_data.cluster, sub_data)
 
         # try:
+        # ###################################### DEBUG ###################################### #
+        # print("\nsize of sub_data.x: {};".format(sub_data.x.shape[0]))
+        # print("\nsize of out_data.x: {};".format(out_data.x.shape[0]))
+        # print("time_step_len: {};".format(sub_data.time_step_len[0]))
+        # print("cluster: {};".format(sub_data.cluster))
+        # print("size of cluster: {};".format(sub_data.cluster.shape))
+        # print("num of cluster: {};".format(torch.unique(sub_data.cluster).shape))
+        # ###################################### DEBUG ###################################### #
+
         assert out_data.x.shape[0] % int(sub_data.time_step_len[0]) == 0
         # except:
             # from pdb import set_trace; set_trace()
@@ -69,6 +79,7 @@ class GraphLayerProp(MessagePassing):
         )
 
     def forward(self, x, edge_index):
+        edge_index, _ = remove_self_loops(edge_index)
         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
 
         if self.verbose:

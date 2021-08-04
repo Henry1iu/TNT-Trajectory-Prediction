@@ -25,7 +25,7 @@ def get_fc_edge_index(num_nodes, start=0):
     for i in range(num_nodes):
         from_ = np.ones(num_nodes, dtype=np.int64) * i
 
-        # FIX BUG: no self loop in ful connected nodes graphs
+        # FIX BUG: exclude self loop in ful connected nodes graphs
         edge_index = np.hstack((edge_index,
                                 np.vstack((np.hstack([from_[:i], from_[i+1:]]), np.hstack([to_[:i], to_[i+1:]])))))
     edge_index = edge_index + start

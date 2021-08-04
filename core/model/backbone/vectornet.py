@@ -54,7 +54,7 @@ class VectorNetBackbone(nn.Module):
                 nn.ReLU(),
                 nn.Linear(aux_mlp_width, self.polyline_vec_shape)
             )
-            self.aux_mlp = nn.DataParallel(self.aux_mlp, device_ids=[1, 0])
+            # self.aux_mlp = nn.DataParallel(self.aux_mlp, device_ids=[1, 0])
 
     def forward(self, data):
         """
@@ -71,7 +71,7 @@ class VectorNetBackbone(nn.Module):
 
         if self.training and self.with_aux:
             batch_size = data.num_graphs
-            mask_polyline_indices = [random.randint(1, valid_lens[i]) + i*time_step_len for i in range(batch_size)]
+            mask_polyline_indices = [random.randint(1, valid_lens[i] - 1) + i * time_step_len for i in range(batch_size)]
             aux_gt = sub_graph_out.x[mask_polyline_indices]
             sub_graph_out.x[mask_polyline_indices] = 0.0
 
