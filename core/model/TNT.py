@@ -162,7 +162,7 @@ class TNT(nn.Module):
         # add the target prediction loss
         candidate_gt, offset_gt = candidate_gt.view(-1, n), offset_gt.view(-1, 2)
         candidate_mask = data.candidate_mask.view(-1, n)
-        target_loss = self.target_pred_layer.loss(
+        target_loss, pred_tar, pred_offset = self.target_pred_layer.loss(
             target_feat,
             target_candidate,
             candidate_gt,
@@ -174,7 +174,7 @@ class TNT(nn.Module):
 
         # add the motion estimation loss
         location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
-        traj_loss, _ = self.motion_estimator.loss(
+        traj_loss = self.motion_estimator.loss(
             target_feat,
             location_gt,
             traj_gt,
@@ -183,7 +183,6 @@ class TNT(nn.Module):
         loss += self.lambda2 * traj_loss
 
         # add the score and selection loss
-        pred_tar, pred_offset = self.target_pred_layer(target_feat, target_candidate, candidate_mask)
         traj_pred = self.motion_estimator(target_feat, pred_tar+pred_offset)
         score_loss = self.traj_score_layer.loss(
             target_feat,

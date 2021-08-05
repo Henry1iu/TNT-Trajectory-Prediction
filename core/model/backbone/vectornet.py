@@ -86,7 +86,7 @@ class VectorNetBackbone(nn.Module):
         if isinstance(data, Batch):
             # mini-batch case
             for idx in range(data.num_graphs):
-                node_list = torch.tensor([i for i in range(idx * time_step_len, 1 + idx * time_step_len + valid_lens[idx])],
+                node_list = torch.tensor([i for i in range(idx * time_step_len, idx * time_step_len + valid_lens[idx])],
                                          device=self.device).long()
                 xx, yy = torch.meshgrid(node_list, node_list)
                 xy = torch.vstack([xx.reshape(-1), yy.reshape(-1)])
@@ -95,7 +95,7 @@ class VectorNetBackbone(nn.Module):
 
         elif isinstance(data, Data):
             # single batch case
-            node_list = torch.tensor([i for i in range(valid_lens[0] + 1)], device=self.device).long()
+            node_list = torch.tensor([i for i in range(valid_lens[0])], device=self.device).long()
             xx, yy = torch.meshgrid(node_list, node_list)
             edge_index = torch.vstack([xx.reshape(-1), yy.reshape(-1)])
             edge_index = edge_index[:, edge_index[0] != edge_index[1]]         # remove the self-loop

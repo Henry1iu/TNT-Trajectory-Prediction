@@ -150,8 +150,6 @@ class ArgoverseInMem(InMemoryDataset):
         traj_cnt = 0
         for _, [feat, has_obs] in enumerate(zip(traj_feats, traj_has_obss)):
             xy_s = feat[has_obs][:-1, :2]
-            if len(xy_s) < 1:
-                continue
             vec = feat[has_obs][1:, :2] - feat[has_obs][:-1, :2]
             traffic_ctrl = np.zeros((len(xy_s), 1))
             is_intersect = np.zeros((len(xy_s), 1))

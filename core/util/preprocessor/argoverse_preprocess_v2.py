@@ -269,16 +269,12 @@ class ArgoversePreprocessor(Preprocessor):
             control.append(lane.has_traffic_control * np.ones(num_segs, np.float32))
             intersect.append(lane.is_intersection * np.ones(num_segs, np.float32))
 
-        node_idcs = []
+        lane_idcs = []
         count = 0
         for i, ctr in enumerate(ctrs):
-            node_idcs.append(range(count, count + len(ctr)))
+            lane_idcs.append(i * np.ones(len(ctr), np.int64))
             count += len(ctr)
         num_nodes = count
-
-        lane_idcs = []
-        for i, idcs in enumerate(node_idcs):
-            lane_idcs.append(i * np.ones(len(idcs), np.int64))
         lane_idcs = np.concatenate(lane_idcs, 0)
 
         graph = dict()

@@ -64,7 +64,7 @@ class TrajScoreSelection(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-        self.score_mlp = nn.DataParallel(self.score_mlp, device_ids=[1, 0])
+        # self.score_mlp = nn.DataParallel(self.score_mlp, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """

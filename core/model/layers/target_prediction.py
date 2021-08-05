@@ -43,8 +43,8 @@ class TargetPred(nn.Module):
             nn.Linear(hidden_dim, 2)
         )
 
-        self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
-        self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
+        # self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
+        # self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """
@@ -121,14 +121,13 @@ class TargetPred(nn.Module):
         # classification loss in m selected candidates
         _, indices = tar_candit_prob.topk(self.M, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
-        candidate_gt_selected = candidate_gt[batch_idx, indices]
-        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
+        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        # candidate_gt_selected = candidate_gt[batch_idx, indices]
+        # m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
 
-        # pred offset and compute regression loss
-        feat_in_reg = torch.cat([feat_in, tar_candidate[candidate_gt.bool()]], dim=1)  # [batch_size, feat_dim + 2]
-        tar_offset_mean = self.mean_mlp(feat_in_reg)                                   # [batch_size, 2]
-        offset_loss = F.smooth_l1_loss(tar_offset_mean, offset_gt, reduction=reduction)
+        # pred offset with gt candidate and compute regression loss
+        tar_offset_mean = self.mean_mlp(feat_in_prob)                                   # [batch_size, 2]
+        offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction=reduction)
 
         # ====================================== DEBUG ====================================== #
         # # select the M output and check corresponding gt
@@ -157,8 +156,8 @@ class TargetPred(nn.Module):
         # print("[DEBUG]: dst_pred: \n{};\n[DEBUG]: dst_gt: \n{};".format(dst_pred.detach().cpu().numpy(),
         #                                                                 dst_gt.detach().cpu().numpy()))
         # ====================================== DEBUG ====================================== #
-        return n_candidate_loss + m_candidate_loss + offset_loss
-        # return n_candidate_loss + offset_loss
+        # return n_candidate_loss + m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        return n_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
 
     def inference(self,
                   feat_in: torch.Tensor,
