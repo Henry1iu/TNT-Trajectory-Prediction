@@ -50,9 +50,9 @@ The changes should be automaticly merged to your own branch.
 If you find there is conflict, ask me for help. 
 
 ### Prerequisite
-* python==3.6
-* pytorch==1.4.0
-* torch-geometric==1.5.0
+* python==3.8.8
+* pytorch==1.8.1
+* torch-geometric==1.7.2
 * tensorboard
 * argoverse-api
 * pandas==1.0.0

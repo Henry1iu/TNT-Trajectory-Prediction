@@ -58,9 +58,9 @@ class TrajScoreSelection(nn.Module):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            # nn.Linear(hidden_dim, hidden_dim),
-            # nn.LayerNorm(hidden_dim),
-            # nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
 
@@ -93,18 +93,14 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        # print("[TrajScoreSelection]: Score GT: {}".format(score_gt))
-        # print("[TrajScoreSelection]: Score Pred: {}".format(score_pred))
-
-        logprobs = - torch.log(score_pred)
-        batch = traj_in.shape[0]
-        if reduction == 'mean':
-            loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
-        else:
-            loss = torch.sum(torch.mul(logprobs, score_gt))
-        # print("[TrajScoreSelection]: loss: {}".format(loss))
-        return loss
-        # return F.kl_div(score_pred, score_gt, reduction=reduction)
+        return F.mse_loss(score_pred, score_gt, reduction=reduction)
+        # logprobs = - torch.log(score_pred)
+        # batch = traj_in.shape[0]
+        # if reduction == 'mean':
+        #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        # else:
+        #     loss = torch.sum(torch.mul(logprobs, score_gt))
+        # return loss
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
@@ -127,6 +123,8 @@ if __name__ == "__main__":
     feat_tensor = torch.randn((batch_size, feat_in))
     traj_in = torch.randn((batch_size, 50, horizon * 2))
     traj_gt = torch.randn((batch_size, horizon * 2))
+
+    traj_in[:, 0, :] = traj_gt
 
     # forward
     score = layer(feat_tensor, traj_in)

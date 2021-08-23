@@ -72,9 +72,9 @@ class Trainer(object):
             # pin_memory=True,
             shuffle=True
         )
-        # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers)
         self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size)
-        # self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=num_workers, pin_memory=True)
+        # self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=num_workers)
         self.test_loader = self.loader(self.testset, batch_size=self.batch_size)
 
         # model

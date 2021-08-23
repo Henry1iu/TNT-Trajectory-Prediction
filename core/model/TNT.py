@@ -8,11 +8,13 @@ import torch.nn.functional as F
 from torch_geometric.data import DataLoader
 
 from core.model.backbone.vectornet import VectorNetBackbone
+# from core.model.backbone.vectornet_v2 import VectorNetBackbone
 from core.model.layers.target_prediction import TargetPred
+# from core.model.layers.target_prediction_v2 import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
 from core.model.layers.scoring_and_selection import TrajScoreSelection, distance_metric
 
-from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
+from core.dataloader.argoverse_loader_v2 import GraphData, ArgoverseInMem
 
 
 class TNT(nn.Module):
@@ -33,7 +35,7 @@ class TNT(nn.Module):
                  k=6,
                  lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=0.1,
+                 lambda3=1.0,
                  device=torch.device("cpu"),
                  multi_gpu: bool = False):
         """
@@ -74,7 +76,6 @@ class TNT(nn.Module):
         # feature extraction backbone
         self.backbone = VectorNetBackbone(
             in_channels=in_channels,
-            pred_len=horizon,
             num_subgraph_layres=num_subgraph_layers,
             subgraph_width=subgraph_width,
             num_global_graph_layer=num_global_graph_layer,
@@ -149,7 +150,7 @@ class TNT(nn.Module):
         target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
 
-        global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
+        global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
         target_feat = global_feat[:, 0]
 
         loss = 0.0
@@ -252,8 +253,7 @@ class TNT(nn.Module):
 
 if __name__ == "__main__":
     batch_size = 32
-    # DATA_DIR = "../../dataset/interm_tnt_with_filter"
-    DATA_DIR = "../../dataset/interm_tnt_n_s_0624"
+    DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:1")
     # device = torch.device("cpu")
 
-    model = TNT(in_channels=10, m=m, k=k, with_aux=True, device=device).to(device)
+    model = TNT(in_channels=dataset.num_features, m=m, k=k, with_aux=True, device=device).to(device)
     model.train()
 
     for i, data in enumerate(tqdm(data_iter)):

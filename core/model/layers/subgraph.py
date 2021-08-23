@@ -30,7 +30,7 @@ class SubGraph(nn.Module):
         args:
             sub_data (Data): [x, y, cluster, edge_index, valid_len]
         """
-        x, edge_index = sub_data.x, sub_data.edge_index
+        x, edge_index, batch = sub_data.x, sub_data.edge_index, sub_data.batch
 
         for name, layer in self.layer_seq.named_modules():
             if isinstance(layer, GraphLayerProp):
@@ -81,10 +81,10 @@ class GraphLayerProp(MessagePassing):
     def forward(self, x, edge_index):
         edge_index, _ = remove_self_loops(edge_index)
         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
-
+        residual = x
         if self.verbose:
             print(f'x before mlp: {x}')
-        x = self.mlp(x)
+        x = self.mlp(x) + residual
         if self.verbose:
             print(f"x after mlp: {x}")
         return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)

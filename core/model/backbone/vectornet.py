@@ -18,7 +18,6 @@ class VectorNetBackbone(nn.Module):
 
     def __init__(self,
                  in_channels=8,
-                 pred_len=30,
                  num_subgraph_layres=3,
                  num_global_graph_layer=1,
                  subgraph_width=64,
@@ -29,8 +28,6 @@ class VectorNetBackbone(nn.Module):
         super(VectorNetBackbone, self).__init__()
         # some params
         self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
-        self.out_channels = 2
-        self.pred_len = pred_len
         self.subgraph_width = subgraph_width
         self.global_graph_width = global_graph_width
         self.max_n_guesses = 1

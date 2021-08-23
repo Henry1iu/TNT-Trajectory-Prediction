@@ -2,6 +2,7 @@ import os
 import sys
 from os.path import join as pjoin
 from datetime import datetime
+import tracemalloc
 
 import argparse
 
@@ -10,6 +11,7 @@ from torch_geometric.data import DataLoader
 
 from core.dataloader.dataset import GraphDataset
 from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
+from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2
 from core.trainer.tnt_trainer import TNTTrainer
 
 TEST = False
@@ -32,9 +34,10 @@ def train(args):
     # train_set = Argoverse(pjoin(args.data_root, "val_intermediate")).shuffle()
     # eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
     # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
+    # tracemalloc.start()
 
-    train_set = ArgoverseInMem(pjoin(args.data_root, "train_intermediate")).shuffle()
-    eval_set = ArgoverseInMem(pjoin(args.data_root, "val_intermediate"))
+    train_set = ArgoverseInMemv2(pjoin(args.data_root, "train_intermediate")).shuffle()
+    eval_set = ArgoverseInMemv2(pjoin(args.data_root, "val_intermediate"))
 
     # loader = DataLoader
     # t_loader = loader(train_set[:10] if TEST else train_set,
@@ -85,10 +88,18 @@ def train(args):
     min_eval_loss = trainer.min_eval_loss
 
     # training
+    # snapshot = tracemalloc.take_snapshot()
+    # top_stats = snapshot.statistics('lineno')
+    # print("[ Top 10 ]")
+    # for stat in top_stats[:10]:
+    #     print(stat)\
+
     for iter_epoch in range(args.n_epoch):
         _ = trainer.train(iter_epoch)
 
         eval_loss = trainer.eval(iter_epoch)
+        # eval_loss = 1.0
+
         if not min_eval_loss:
             min_eval_loss = eval_loss
         elif eval_loss < min_eval_loss:
@@ -98,13 +109,20 @@ def train(args):
             trainer.save(iter_epoch, min_eval_loss)
             trainer.save_model("best")
 
+        # snapshot = tracemalloc.take_snapshot()
+        # top_stats = snapshot.statistics('lineno')
+        #
+        # print("[ Top 10 ]")
+        # for stat in top_stats[:10]:
+        #     print(stat)
+
     trainer.save_model("final")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0617",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0804_small",
                         help="root dir for datasets")
     parser.add_argument("-o", "--output_dir", required=False, type=str, default="run/tnt/",
                         help="ex)dir to save checkpoint and model")
@@ -114,19 +132,19 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--aux_loss", action="store_true", default=True,
                         help="Training with the auxiliary recovery loss")
 
-    parser.add_argument("-b", "--batch_size", type=int, default=512,
+    parser.add_argument("-b", "--batch_size", type=int, default=2,
                         help="number of batch_size")
     parser.add_argument("-e", "--n_epoch", type=int, default=50,
                         help="number of epochs")
     parser.add_argument("-w", "--num_workers", type=int, default=16,
                         help="dataloader worker size")
 
-    parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
+    parser.add_argument("-c", "--with_cuda", action="store_true", default=False,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=[1, 0], nargs='+',
-                        help="CUDA device ids")
-    # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
+    # parser.add_argument("-cd", "--cuda_device", type=int, default=[1, 0], nargs='+',
     #                     help="CUDA device ids")
+    parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
+                        help="CUDA device ids")
     parser.add_argument("--log_freq", type=int, default=2,
                         help="printing loss every n iter: setting n")
     # parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
@@ -140,10 +158,10 @@ if __name__ == "__main__":
     parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")
 
     parser.add_argument("-rc", "--resume_checkpoint", type=str,
-                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
+                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/08-04-16-38/checkpoint_iter30.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/06-18-23-33/best_DataParallel.pth",
+                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/08-04-16-38/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()

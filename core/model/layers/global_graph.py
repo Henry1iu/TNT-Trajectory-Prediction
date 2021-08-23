@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing, max_pool
 from torch_geometric.utils import add_self_loops, degree
 from torch_geometric.data import Data
-from torch_geometric.nn import GATConv, GATv2Conv, TransformerConv
+from torch_geometric.nn import GATConv, GATv2Conv, TransformerConv, SuperGATConv
 
 
 class GlobalGraph(nn.Module):

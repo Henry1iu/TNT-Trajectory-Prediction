@@ -26,6 +26,19 @@ def get_fc_edge_index(node_indices):
     return xy
 
 
+def get_traj_edge_index(node_indices):
+    """
+    generate the polyline graph for traj, each node are only directionally connected with the nodes in its future
+    node_indices: np.array([indices]), the indices of nodes connecting with each other;
+    return a tensor(2, edges), indicing edge_index
+    """
+    edge_index = np.empty((2, 0))
+    for i in range(len(node_indices)):
+        xx, yy = np.meshgrid(node_indices[i], node_indices[i:])
+        edge_index = np.hstack([edge_index, np.vstack(([xx.reshape(-1), yy.reshape(-1)])).astype(np.int64)])
+    return edge_index
+
+
 class GraphData(Data):
     """
     override key `cluster` indicating which polyline_id is for the vector
@@ -63,6 +76,7 @@ class ArgoverseInMem(InMemoryDataset):
     def process(self):
         """ transform the raw data and store in GraphData """
         # loading the raw data
+        traj_lens = []
         valid_lens = []
         candidate_lens = []
         for raw_path in tqdm(self.raw_paths, desc="Loading Raw Data..."):
@@ -70,6 +84,8 @@ class ArgoverseInMem(InMemoryDataset):
 
             # statistics
             traj_num = raw_data['feats'].values[0].shape[0]
+            traj_lens.append(traj_num)
+
             lane_num = raw_data['graph'].values[0]['lane_idcs'].max() + 1
             valid_lens.append(traj_num + lane_num)
 
@@ -86,21 +102,23 @@ class ArgoverseInMem(InMemoryDataset):
             raw_data = pd.read_pickle(raw_path)
 
             # input data
-            x, cluster, edge_index = self._get_x(raw_data)
+            x, cluster, edge_index, identifier = self._get_x(raw_data)
             y = self._get_y(raw_data)
             graph_input = GraphData(
                 x=torch.from_numpy(x).float(),
                 y=torch.from_numpy(y).float(),
                 cluster=torch.from_numpy(cluster).short(),
                 edge_index=torch.from_numpy(edge_index).long(),
+                identifier=torch.from_numpy(identifier).float(),    # the identify embedding of global graph completion
 
-                valid_len=torch.tensor([valid_lens[ind]]),          # number of valid polyline
-                time_step_len=torch.tensor([num_valid_len_max]),    # the maximum of no. of polyline
+                traj_len=torch.tensor([traj_lens[ind]]).int(),            # number of traj polyline
+                valid_len=torch.tensor([valid_lens[ind]]).int(),          # number of valid polyline
+                time_step_len=torch.tensor([num_valid_len_max]).int(),    # the maximum of no. of polyline
 
                 candidate_len_max=torch.tensor([num_candidate_max]).int(),
                 candidate_mask=[],
                 candidate=torch.from_numpy(raw_data['tar_candts'].values[0]).float(),
-                candidate_gt=torch.from_numpy(raw_data['gt_candts'].values[0]).float(),
+                candidate_gt=torch.from_numpy(raw_data['gt_candts'].values[0]).bool(),
                 offset_gt=torch.from_numpy(raw_data['gt_tar_offset'].values[0]).float(),
                 target_gt=torch.from_numpy(raw_data['gt_preds'].values[0][0][-1, :]).float(),
             )
@@ -119,6 +137,7 @@ class ArgoverseInMem(InMemoryDataset):
         # pad feature with zero nodes
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
         data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)])
+        data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.x.dtype)])
 
         # pad candidate and candidate_gt
         num_cand_max = data.candidate_len_max[0].item()
@@ -142,6 +161,8 @@ class ArgoverseInMem(InMemoryDataset):
         polyline_id: the polyline id of this node belonging to;
         """
         feats = np.empty((0, 10))
+        edge_index = np.empty((2, 0), dtype=np.int64)
+        identifier = np.empty((0, 2))
 
         # get traj features
         traj_feats = data_seq['feats'].values[0]
@@ -171,14 +192,16 @@ class ArgoverseInMem(InMemoryDataset):
 
         # get the cluster and construct subgraph edge_index
         cluster = copy(feats[:, -1].astype(np.int))
-        edge_index = np.empty((2, 0), dtype=np.int64)
         for cluster_idc in np.unique(cluster):
             [indices] = np.where(cluster == cluster_idc)
+            identifier = np.vstack([identifier, np.min(feats[indices, :2], axis=0)])
             if len(indices) <= 1:
-                continue
-            edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
-
-        return feats, cluster, edge_index
+                continue                # skip if only 1 node
+            if cluster_idc < traj_cnt:
+                edge_index = np.hstack([edge_index, get_traj_edge_index(indices)])
+            else:
+                edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
+        return feats, cluster, edge_index, identifier
 
     @staticmethod
     def _get_y(data_seq):
@@ -191,7 +214,7 @@ class ArgoverseInMem(InMemoryDataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_with_filter"
+    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
     INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
@@ -202,7 +225,7 @@ if __name__ == "__main__":
         # dataset = Argoverse(dataset_input_path)
         dataset = ArgoverseInMem(dataset_input_path).shuffle()
         batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=True)
-        for k in range(3):
+        for k in range(1):
             for i, data in enumerate(tqdm(batch_iter, total=len(batch_iter), bar_format="{l_bar}{r_bar}")):
                 pass
 
