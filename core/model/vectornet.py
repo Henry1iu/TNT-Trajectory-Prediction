@@ -50,7 +50,6 @@ class VectorNet(nn.Module):
         # subgraph feature extractor
         self.backbone = VectorNetBackbone(
             in_channels=in_channels,
-            pred_len=horizon,
             num_subgraph_layres=num_subgraph_layers,
             subgraph_width=subgraph_width,
             num_global_graph_layer=num_global_graph_layer,
