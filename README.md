@@ -19,7 +19,6 @@ The best performance achieved by our implementation and reported in the papers.
 |  TNT(**Ours**)   | -            | -           | -        | 1.138       | 2.123       | 0.286    |
 
 ## Setup
-***
 
 ### Prerequisite
 This implementation has been tested on Ubuntu 18.04 and has the following requirements:
@@ -36,6 +35,7 @@ You can also install the dependencies using pip.
 ```
 pip install -r requirements.txt
 ```
+
 ### Data Preparation
 Please download the [Argoverse Motion Forecasting v1.1](https://www.argoverse.org/data.html#forecasting-link) and extract 
 the compressed data to the "raw_datas" folder as stored in the following directory structure:
