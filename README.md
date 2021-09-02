@@ -3,7 +3,7 @@
 
 # TNT-Trajectory-Predition
 
-An python implementation of 
+A Python and Pytorch implementation of 
 [TNT: Target-driveN Trajectory Prediction](https://arxiv.org/abs/2008.08294#:~:text=TNT%20has%20three%20stages%20which,state%20sequences%20conditioned%20on%20targets.)
 and
 [VectorNet: Encoding HD Maps and Agent Dynamics from Vectorized Representation](https://arxiv.org/abs/2005.04259).
