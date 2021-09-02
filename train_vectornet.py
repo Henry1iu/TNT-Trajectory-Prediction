@@ -5,15 +5,9 @@ from datetime import datetime
 
 import argparse
 
-# from torch.utils.data import DataLoader
-from torch_geometric.data import DataLoader
-
-from core.dataloader.dataset import GraphDataset
 from core.dataloader.argoverse_loader import Argoverse, GraphData
 from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2
 from core.trainer.vectornet_trainer import VectorNetTrainer
-
-TEST = False
 
 sys.path.append("core/dataloader")
 
@@ -24,28 +18,8 @@ def train(args):
     :param args:
     :return:
     """
-    # data loading
-    # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
-    # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-    # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-
     train_set = ArgoverseInMemv2(pjoin(args.data_root, "train_intermediate")).shuffle()
     eval_set = ArgoverseInMemv2(pjoin(args.data_root, "val_intermediate"))
-
-    # loader = DataLoader
-    # t_loader = loader(train_set[:10] if TEST else train_set,
-    #                   batch_size=args.batch_size,
-    #                   num_workers=args.num_workers,
-    #                   pin_memory=True,
-    #                   shuffle=True)
-    # e_loader = loader(eval_set[:2] if TEST else eval_set,
-    #                   batch_size=args.batch_size,
-    #                   num_workers=args.num_workers,
-    #                   pin_memory=True)
-    # ts_loader = loader(test_set[:1] if TEST else test_set,
-    #                    batch_size=1,
-    #                    num_workers=1,
-    #                    pin_memory=True)
 
     # init output dir
     time_stamp = datetime.now().strftime("%m-%d-%H-%M")
@@ -63,6 +37,9 @@ def train(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         lr=args.lr,
+        warmup_epoch=args.warmup_epoch,
+        lr_update_freq=args.lr_update_freq,
+        lr_decay_rate=args.lr_decay_rate,
         weight_decay=args.adam_weight_decay,
         betas=(args.adam_beta1, args.adam_beta2),
         num_global_graph_layer=args.num_glayer,
@@ -117,21 +94,21 @@ if __name__ == "__main__":
 
     parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=[0, 1], nargs='+',
+    parser.add_argument("-cd", "--cuda_device", type=int, default=[], nargs='+',
                         help="CUDA device ids")
-    # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
-    #                     help="CUDA device ids")
     parser.add_argument("--log_freq", type=int, default=2,
                         help="printing loss every n iter: setting n")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
-    parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
+    parser.add_argument("-we", "--warmup_epoch", type=int, default=20,
+                        help="The epoch to start the learning rate decay")
     parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
                         help="learning rate decay frequency for lr scheduler")
     parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")
+    parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
+    parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
+    parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
 
     parser.add_argument("-rc", "--resume_checkpoint", type=str, help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str, help="resume a model state for fine-tune")

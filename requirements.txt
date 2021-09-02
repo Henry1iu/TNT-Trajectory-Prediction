@@ -1,0 +1,28 @@
+h5py==3.2.1
+Markdown==3.3.4
+matplotlib==3.4.1
+numpy==1.20.2
+numpy-quaternion==2021.4.5.14.42.35
+opencv-python==4.5.1.48
+pandas==1.2.4
+Pillow @ file:///tmp/build/80754af9/pillow_1617383569452/work
+protobuf==3.17.3
+pyOpenSSL @ file:///home/conda/feedstock_root/build_artifacts/pyopenssl_1608055815057/work
+pyparsing==2.4.7
+scikit-learn @ file:///tmp/build/80754af9/scikit-learn_1621370412049/work
+scipy @ file:///tmp/build/80754af9/scipy_1616703172749/work
+six @ file:///tmp/build/80754af9/six_1605205327372/work
+sklearn==0.0
+tensorboard==2.5.0
+tensorboard-data-server==0.6.0
+tensorboard-plugin-wit==1.8.0
+tensorboardX @ file:///home/conda/feedstock_root/build_artifacts/tensorboardx_1617715858833/work
+torch==1.8.1
+torch-cluster==1.5.9
+torch-geometric @ file:///usr/share/miniconda/envs/test/conda-bld/pytorch-geometric_1624734501099/work
+torch-scatter==2.0.7
+torch-sparse @ file:///usr/share/miniconda/envs/test/conda-bld/pytorch-sparse_1624689376669/work
+torch-spline-conv==1.2.1
+torchaudio==0.8.0a0+e4e171a
+torchvision==0.9.1
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1625664838498/work

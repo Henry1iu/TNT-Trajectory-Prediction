@@ -3,13 +3,14 @@
 # Date: 2021.07.16
 
 import os
+import sys
 from os.path import join as pjoin
 import copy
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from scipy import sparse
+import argparse
 
 import warnings
 
@@ -392,10 +393,13 @@ def ref_copy(data):
 
 if __name__ == "__main__":
     # config path
-    root = "/media/Data/autonomous_driving/Argoverse"
-    raw_dir = os.path.join(root, "raw_data")
-    # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0804"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--root", type=str, default="../dataset")
+    parser.add_argument("-d", "--dest", type=str, default="../dataset")
+    args = parser.parse_args()
+
+    raw_dir = os.path.join(args.root, "raw_data")
+    interm_dir = os.path.join(args.dest, "interm_data")
 
     for split in ["train", "val"]:
         # construct the preprocessor and dataloader
