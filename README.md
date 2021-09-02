@@ -112,6 +112,6 @@ xxx
 
 ```
 
-##3 Questions
+### Questions
 
 This repo is maintained by [Jianbang Liu](henryliu@link.cuhk.edu.hk) and [Xinyu Mao](maoxinyu@link.cuhk.edu.hk) - please feel free to reach out or open an issue if you have additional questions/concerns.
