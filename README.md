@@ -60,8 +60,6 @@ If you store the raw data at a different location, you can change relative path 
 
 ## Usage
 
-***
-
 ### Training
 1. To train the VectorNet model using NVIDIA GPU and CUDA:
     ```
@@ -88,7 +86,7 @@ If you store the raw data at a different location, you can change relative path 
 **TBD**
 
 ## Others
-***
+
 
 ### TODO
 1. Data-Related:
@@ -106,7 +104,7 @@ If you store the raw data at a different location, you can change relative path 
 - [ ] Provide the inference function to visualize the input sequences and corresponding results.
 
 ### Citing
-***
+
 
 if you've found this code to be useful, please consider citing our paper!
 ```
