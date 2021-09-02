@@ -1,3 +1,6 @@
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/tnt-target-driven-trajectory-prediction/trajectory-prediction-on-interaction-dataset-2)](https://paperswithcode.com/sota/trajectory-prediction-on-interaction-dataset-2?p=tnt-target-driven-trajectory-prediction)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/tnt-target-driven-trajectory-prediction/motion-forecasting-on-argoverse-cvpr-2020)](https://paperswithcode.com/sota/motion-forecasting-on-argoverse-cvpr-2020?p=tnt-target-driven-trajectory-prediction)
+
 # TNT-Trajectory-Predition
 
 An python implementation of 
@@ -10,8 +13,8 @@ The best performance achieved by our implementation and reported in the papers.
 
 | Algorithm | minADE(K=1)  | minFDE(K=1) | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
 | :-------: | :-----------:| :---------: | :-------:| :----------:| :---------: | :-------:|
-| VectorNet (Original) | 1.66        | 3.67       | -    | -           | -           | -        |
-| VectorNet (**Ours**)| 1.855        | 3.845       | 0.649    | -           | -           | -        |
+| VectorNet (Original) | 1.66        | 3.67       | -        | -           | -           | -        |
+| VectorNet (**Ours**) | 1.855       | 3.845      | 0.649    | -           | -           | -        |
 |  TNT(Original)   | -            | -           | -        | 0.728       | 1.292       | 0.093    |
 |  TNT(**Ours**)   | -            | -           | -        | 1.138       | 2.123       | 0.286    |
 
