@@ -68,32 +68,50 @@ class ArgoversePreprocessor(Dataset):
 
         # get the rotation
         pre, conf = self.am.get_lane_direction(query_xy_city_coords=orig, city_name=city)
-        _, conf, nearest = self.am.get_nearest_centerline(query_xy_city_coords=orig, city_name=city)
+        _, conf, nearest = self.am.get_nearest_centerline(query_xy_city_coords=trajs[:self.obs_horizon], city_name=city)
         nearest = nearest.reshape((-1, nearest.shape[0], nearest.shape[1]))
 
-        if conf <= 0.9:
-            pre = (trajs[self.obs_horizon-4] - orig) / 2.0
+        if conf <= 0.8:
+            pre = (orig - trajs[self.obs_horizon-4]) / 2.0
         theta = - np.arctan2(pre[1], pre[0])
+        print("pre: {};".format(pre))
+        print("theta: {};".format(theta))
+
         rot = np.asarray([
             [np.cos(theta), -np.sin(theta)],
             [np.sin(theta), np.cos(theta)]], np.float32)
 
-        agt_norm = np.matmul(rot, (trajs - orig.reshape(-1, 2)).T).T
+        rot_ = np.asarray([
+            [1, 0],
+            [0, 1]
+        ])
 
-        fig, axs = plt.subplots(1, 1)
+        agt_rot = np.matmul(rot, (trajs - orig.reshape(-1, 2)).T).T
+        agt_ori = np.matmul(rot_, (trajs - orig.reshape(-1, 2)).T).T
 
-        axs.plot(agt_norm[:self.obs_horizon, 0], agt_norm[:self.obs_horizon, 1], 'gx-')     # obs
-        axs.plot(agt_norm[self.obs_horizon:, 0], agt_norm[self.obs_horizon:, 1], 'yx-')     # future
-        axs.set_xlim([-120, 120])
-        axs.set_ylim([-50, 50])
+        fig, axs = plt.subplots(2, 1)
+        # plot original seq
+        axs[0].plot(agt_ori[:self.obs_horizon, 0], agt_ori[:self.obs_horizon, 1], 'gx-')     # obs
+        axs[0].plot(agt_ori[self.obs_horizon:, 0], agt_ori[self.obs_horizon:, 1], 'yx-')     # future
+        axs[0].set_xlim([-120, 120])
+        axs[0].set_ylim([-50, 50])
 
-        visualize_centerline(axs, lanes, orig, rot)
-        visualize_centerline(axs, nearest, orig, rot, color='red')
+        visualize_centerline(axs[0], lanes, orig, rot_)
+        visualize_centerline(axs[0], nearest, orig, rot_, color='red')
+
+        # plot rotated seq
+        axs[1].plot(agt_rot[:self.obs_horizon, 0], agt_rot[:self.obs_horizon, 1], 'gx-')     # obs
+        axs[1].plot(agt_rot[self.obs_horizon:, 0], agt_rot[self.obs_horizon:, 1], 'yx-')     # future
+        axs[1].set_xlim([-120, 120])
+        axs[1].set_ylim([-50, 50])
+
+        visualize_centerline(axs[1], lanes, orig, rot)
+        visualize_centerline(axs[1], nearest, orig, rot, color='red')
 
         plt.show()
         print("")
 
-        return agt_norm.astype(np.float32)
+        return agt_rot.astype(np.float32)
 
     def __len__(self):
         return len(self.loader)
