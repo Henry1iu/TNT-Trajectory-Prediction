@@ -5,7 +5,7 @@ import time
 from tqdm import tqdm
 
 from sklearn.decomposition import PCA
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, KMeans
 from sklearn.manifold import TSNE
 
 import matplotlib.pyplot as plt
@@ -40,7 +40,8 @@ class ArgoversePreprocessor(Dataset):
                  root_dir,
                  obs_horizon=20,
                  pred_horizon=30,
-                 split="train"):
+                 split="train",
+                 viz=False):
 
         self.obs_horizon = obs_horizon
         self.pred_horizon = pred_horizon
@@ -51,6 +52,8 @@ class ArgoversePreprocessor(Dataset):
         self.am = ArgoverseMap()
 
         self.loader = ArgoverseForecastingLoader(pjoin(root_dir, split+"_obs" if split == "test" else split))
+
+        self.viz = viz
 
     def __getitem__(self, idx):
         f_path = self.loader.seq_list[idx]
@@ -67,15 +70,13 @@ class ArgoversePreprocessor(Dataset):
         lanes = self.am.find_local_lane_centerlines(orig[0], orig[1], city_name=city)
 
         # get the rotation
-        pre, conf = self.am.get_lane_direction(query_xy_city_coords=orig, city_name=city)
-        _, conf, nearest = self.am.get_nearest_centerline(query_xy_city_coords=trajs[:self.obs_horizon], city_name=city)
-        nearest = nearest.reshape((-1, nearest.shape[0], nearest.shape[1]))
+        lane_dir_vector, conf = self.am.get_lane_direction_traj(traj=trajs[:self.obs_horizon], city_name=city)
 
-        if conf <= 0.8:
-            pre = (orig - trajs[self.obs_horizon-4]) / 2.0
-        theta = - np.arctan2(pre[1], pre[0])
-        print("pre: {};".format(pre))
-        print("theta: {};".format(theta))
+        if conf <= 0.1:
+            lane_dir_vector = (orig - trajs[self.obs_horizon-4]) / 2.0
+        theta = - np.arctan2(lane_dir_vector[1], lane_dir_vector[0])
+        # print("pre: {};".format(pre))
+        # print("theta: {};".format(theta))
 
         rot = np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -89,27 +90,30 @@ class ArgoversePreprocessor(Dataset):
         agt_rot = np.matmul(rot, (trajs - orig.reshape(-1, 2)).T).T
         agt_ori = np.matmul(rot_, (trajs - orig.reshape(-1, 2)).T).T
 
-        fig, axs = plt.subplots(2, 1)
-        # plot original seq
-        axs[0].plot(agt_ori[:self.obs_horizon, 0], agt_ori[:self.obs_horizon, 1], 'gx-')     # obs
-        axs[0].plot(agt_ori[self.obs_horizon:, 0], agt_ori[self.obs_horizon:, 1], 'yx-')     # future
-        axs[0].set_xlim([-120, 120])
-        axs[0].set_ylim([-50, 50])
+        if self.viz:
+            fig, axs = plt.subplots(2, 1)
+            # plot original seq
+            axs[0].plot(agt_ori[:self.obs_horizon, 0], agt_ori[:self.obs_horizon, 1], 'gx-')     # obs
+            axs[0].plot(agt_ori[self.obs_horizon:, 0], agt_ori[self.obs_horizon:, 1], 'yx-')     # future
+            axs[0].set_xlim([-120, 120])
+            axs[0].set_ylim([-50, 50])
 
-        visualize_centerline(axs[0], lanes, orig, rot_)
-        visualize_centerline(axs[0], nearest, orig, rot_, color='red')
+            visualize_centerline(axs[0], lanes, orig, rot_)
+            visualize_centerline(axs[0], [nearest], orig, rot_, color='red')
 
-        # plot rotated seq
-        axs[1].plot(agt_rot[:self.obs_horizon, 0], agt_rot[:self.obs_horizon, 1], 'gx-')     # obs
-        axs[1].plot(agt_rot[self.obs_horizon:, 0], agt_rot[self.obs_horizon:, 1], 'yx-')     # future
-        axs[1].set_xlim([-120, 120])
-        axs[1].set_ylim([-50, 50])
+            # plot rotated seq
+            axs[1].plot(agt_rot[:self.obs_horizon, 0], agt_rot[:self.obs_horizon, 1], 'gx-')     # obs
+            axs[1].plot(agt_rot[self.obs_horizon:, 0], agt_rot[self.obs_horizon:, 1], 'yx-')     # future
+            axs[1].set_xlim([-120, 120])
+            axs[1].set_ylim([-50, 50])
 
-        visualize_centerline(axs[1], lanes, orig, rot)
-        visualize_centerline(axs[1], nearest, orig, rot, color='red')
+            visualize_centerline(axs[1], lanes, orig, rot)
+            visualize_centerline(axs[1], [nearest], orig, rot, color='red')
 
-        plt.show()
-        print("")
+            manager = plt.get_current_fig_manager()
+            manager.full_screen_toggle()
+
+            plt.show()
 
         return agt_rot.astype(np.float32)
 
@@ -120,51 +124,68 @@ class ArgoversePreprocessor(Dataset):
 def main():
     # Init loader
     root = "/media/Data/autonomous_driving/Argoverse/raw_data"
-    dataset = ArgoversePreprocessor(root_dir=root, split="train")
-    loader = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=False, pin_memory=False, drop_last=False)
+    dataset = ArgoversePreprocessor(root_dir=root, split="train", viz=False)
+    loader = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=False, pin_memory=False, drop_last=False)
 
-    fig, axs = plt.subplots(3, 1)
+    # fig, axs = plt.subplots(1, 1)
 
     traj_array_flatten = np.empty((0, 50 * 2), dtype=np.float)
     # load all the target agent trajectory
     for i, traj_batch in enumerate(tqdm(loader)):
         (batch_size, _, _) = traj_batch.shape
-    #     for batch_id in range(batch_size):
-    #         axs[0].plot(traj_batch[batch_id, :, 0], traj_batch[batch_id, :, 1], alpha=0.01)         # plot whole traj
-    #         axs[1].plot(traj_batch[batch_id, :20, 0], traj_batch[batch_id, :20, 1], alpha=0.01)     # plot observed traj
-    #         axs[2].plot(traj_batch[batch_id, 20:, 0], traj_batch[batch_id, 20:, 1], alpha=0.01)     # plot future traj
-    #
+        # for batch_id in range(batch_size):
+        #     axs.plot(traj_batch[batch_id, :20, 0], traj_batch[batch_id, :20, 1], c='b', alpha=0.01)     # plot observed traj
+        #     axs.plot(traj_batch[batch_id, 20:, 0], traj_batch[batch_id, 20:, 1], c='r', alpha=0.01)     # plot future traj
+
         traj_array_flatten = np.vstack([traj_array_flatten, traj_batch.reshape(batch_size, -1)])
-    # plt.show()
+    # plt.show(block=False)
 
     # Apply PCA to reduce the dimension
-    # start_time = time.time()
-    # embedding = PCA(n_components=50).fit_transform(traj_array_flatten)
-    # print("Processing time of PCA: {}".format((time.time() - start_time)/60))
+    start_time = time.time()
+    embedding = PCA(n_components=50).fit_transform(traj_array_flatten)
+    print("Processing time of PCA: {}".format((time.time() - start_time)/60))
 
-    # Apply DSCAN
-    for eps in np.linspace(1, 3, 20):
-        start_time = time.time()
-        db = DBSCAN(eps=eps, min_samples=1000).fit(traj_array_flatten)
-        core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-        core_samples_mask[db.core_sample_indices_] = True
-        labels = db.labels_
-        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-
-        print("\neps = {}".format(eps))
-        print("Processing time of DBSCAN: {}".format((time.time() - start_time)/60))
-        print("Num of Cluster: {}".format(n_clusters_))
-        unique_labels = set(labels)
-        for label in unique_labels:
-            class_member_mask = (labels == label)
-            print("Lable {}: No. of Trajectories: {};".format(label, sum(class_member_mask)))
+    # # Apply DSCAN
+    # for eps in np.linspace(1, 3, 20):
+    #     start_time = time.time()
+    #     db = DBSCAN(eps=eps, min_samples=1000).fit(traj_array_flatten)
+    #     core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+    #     core_samples_mask[db.core_sample_indices_] = True
+    #     labels = db.labels_
+    #     n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+    #
+    #     print("\neps = {}".format(eps))
+    #     print("Processing time of DBSCAN: {}".format((time.time() - start_time)/60))
+    #     print("Num of Cluster: {}".format(n_clusters_))
+    #     unique_labels = set(labels)
+    #     for label in unique_labels:
+    #         class_member_mask = (labels == label)
+    #         print("Lable {}: No. of Trajectories: {};".format(label, sum(class_member_mask)))
 
     # plot the trajectories
 
     # Display via t-SNE
     # start_time = time.time()
-    # traj_embedding = TSNE(n_components=2, init='pca').fit_transform(traj_array)
+    traj_embedding = TSNE(n_components=2, init='pca').fit_transform(traj_array_flatten)
     # print("Processing time of t-SNE: {}".format((time.time() - start_time)/60))
+
+    # Apply k-means
+    n_clusters = 6
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(traj_embedding)
+    labels = kmeans.labels_
+    for idx in range(n_clusters):
+        print("Number of instance: {}".format(np.sum(labels == idx)))
+
+    # plot the cluster
+    fig, axs = plt.subplots(n_clusters, 1)
+    for idx in range(n_clusters):
+        # center = kmeans.cluster_centers_[idx].reshape(50, 2)
+        trajs = traj_array_flatten[labels == idx]
+        trajs = trajs.reshape(trajs.shape[0], 50, 2)
+        for traj in trajs:
+            axs[idx].plot(traj[:, 0], traj[:, 1], c='g', alpha=0.01)
+            # axs[idx].plot(center[:, 0], center[:, 1], c='r', alpha=1)
+    plt.show()
 
 
 if __name__ == "__main__":

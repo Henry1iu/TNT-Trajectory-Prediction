@@ -206,8 +206,7 @@ class TNT(nn.Module):
         """
         raise NotImplementedError
 
-    # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.01):
+    def traj_selection(self, traj_in, score, threshold=4.0):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -220,21 +219,34 @@ class TNT(nn.Module):
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
         traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
 
-        # check the distance between them, NMS
+        # # check the distance between them, NMS
+        # for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
+        #     traj_cnt = 1
+        #     for i in range(1, self.m):
+        #         dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, i].unsqueeze(0))
+        #         if not torch.any(dis < threshold):                       # not exist similar trajectory
+        #             traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
+        #             traj_cnt += 1
+        #
+        #         if traj_cnt >= self.k:
+        #             break                                                       # break if collect enough traj
+        #
+        #     # no enough traj, pad zero traj
+        #     if traj_cnt < self.k:
+        #         traj_selected[:, traj_cnt:] = 0.0
+
+        # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
             traj_cnt = 1
-            for i in range(1, self.m):
-                dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, i].unsqueeze(0))
-                if not torch.any(dis < threshold):                       # not exist similar trajectory
-                    traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
-                    traj_cnt += 1
-
-                if traj_cnt >= self.k:
-                    break                                                       # break if collect enough traj
-
-            # no enough traj, pad zero traj
-            if traj_cnt < self.k:
-                traj_selected[:, traj_cnt:] = 0.0
+            while traj_cnt <= self.k:
+                for j in range(1, self.m):
+                    dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, j].unsqueeze(0))
+                    if not torch.any(dis < threshold):                       # not exist similar trajectory
+                        traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, j]  # add this trajectory
+                        traj_cnt += 1
+                    if traj_cnt >= self.k:
+                        break
+                threshold /= 2.0
 
         return traj_selected
 
