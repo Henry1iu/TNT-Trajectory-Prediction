@@ -206,7 +206,7 @@ class TNT(nn.Module):
         """
         raise NotImplementedError
 
-    def traj_selection(self, traj_in, score, threshold=4.0):
+    def traj_selection(self, traj_in, score, threshold=0.16):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -238,7 +238,7 @@ class TNT(nn.Module):
         # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
             traj_cnt = 1
-            while traj_cnt <= self.k:
+            while traj_cnt < self.k:
                 for j in range(1, self.m):
                     dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, j].unsqueeze(0))
                     if not torch.any(dis < threshold):                       # not exist similar trajectory

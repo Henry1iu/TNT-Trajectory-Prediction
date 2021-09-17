@@ -111,10 +111,10 @@ class TargetPred(nn.Module):
         # classification loss in m selected candidates
         _, indices = tar_candit_prob.topk(self.M, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
         # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
-        # candidate_gt_selected = candidate_gt[batch_idx, indices]
-        # m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
+        candidate_gt_selected = candidate_gt[batch_idx, indices]
+        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
 
         # pred offset with gt candidate and compute regression loss
         tar_offset_mean = self.mean_mlp(feat_in_prob)                                   # [batch_size, n_tar, 2]
@@ -148,7 +148,8 @@ class TargetPred(nn.Module):
         #                                                                 dst_gt.detach().cpu().numpy()))
         # ====================================== DEBUG ====================================== #
         # return n_candidate_loss + m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
-        return n_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        # return n_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        return m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
 
     def inference(self,
                   feat_in: torch.Tensor,
