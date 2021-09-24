@@ -35,7 +35,7 @@ class TNT(nn.Module):
                  k=6,
                  lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=1.0,
+                 lambda3=0.1,
                  device=torch.device("cpu"),
                  multi_gpu: bool = False):
         """
@@ -137,7 +137,7 @@ class TNT(nn.Module):
 
         return self.traj_selection(traj_pred, score)
 
-    def loss(self, data, reduction="sum"):
+    def loss(self, data):
         """
         compute loss according to the gt
         :param data: node feature data
@@ -155,8 +155,8 @@ class TNT(nn.Module):
 
         loss = 0.0
         if self.with_aux and self.training:
-            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
-            loss += aux_loss
+            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction='sum')
+            loss += (aux_loss / batch_size)
 
         candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
@@ -168,8 +168,7 @@ class TNT(nn.Module):
             target_candidate,
             candidate_gt,
             offset_gt,
-            candidate_mask=candidate_mask,
-            reduction=reduction
+            candidate_mask=candidate_mask
         )
         loss += self.lambda1 * target_loss
 
@@ -178,8 +177,7 @@ class TNT(nn.Module):
         traj_loss = self.motion_estimator.loss(
             target_feat,
             location_gt,
-            traj_gt,
-            reduction=reduction
+            traj_gt
         )
         loss += self.lambda2 * traj_loss
 
@@ -188,8 +186,7 @@ class TNT(nn.Module):
         score_loss = self.traj_score_layer.loss(
             target_feat,
             traj_pred,
-            traj_gt,
-            reduction=reduction
+            traj_gt
         )
         loss += self.lambda3 * score_loss
 
@@ -217,7 +214,8 @@ class TNT(nn.Module):
         # re-arrange trajectories according the the descending order of the score
         _, batch_order = score.sort(descending=True)
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
-        traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
+        traj_selected = torch.zeros_like(traj_pred[:, :self.k])           # [batch_size, k, horizon * 2]
+        traj_selected[:, 0] = traj_selected[:, 0]
 
         # # check the distance between them, NMS
         # for batch_id in range(traj_pred.shape[0]):                              # one batch for a time

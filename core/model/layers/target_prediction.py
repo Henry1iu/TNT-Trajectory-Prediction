@@ -31,6 +31,7 @@ class TargetPred(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
+        self.prob_mlp.apply(self._init_weights)
 
         self.mean_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
@@ -42,9 +43,16 @@ class TargetPred(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 2)
         )
+        self.prob_mlp.apply(self._init_weights)
 
         # self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
         # self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
+
+    @staticmethod
+    def _init_weights(m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """
@@ -106,19 +114,19 @@ class TargetPred(nn.Module):
             tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)      # [batch_size, n_tar]
 
         # classfication loss in n candidates
-        n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction=reduction)
+        # n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction='sum')
 
         # classification loss in m selected candidates
         _, indices = tar_candit_prob.topk(self.M, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
-        # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
+        # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
+        tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
         candidate_gt_selected = candidate_gt[batch_idx, indices]
-        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction=reduction)
+        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction='sum') / batch_size
 
         # pred offset with gt candidate and compute regression loss
         tar_offset_mean = self.mean_mlp(feat_in_prob)                                   # [batch_size, n_tar, 2]
-        offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction=reduction)
+        offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction='sum') / batch_size
 
         # ====================================== DEBUG ====================================== #
         # # select the M output and check corresponding gt

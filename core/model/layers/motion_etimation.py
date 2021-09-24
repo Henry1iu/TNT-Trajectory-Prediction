@@ -30,8 +30,14 @@ class MotionEstimation(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, horizon * 2)
         )
-
+        self.traj_pred.apply(self._init_weights)
         # self.traj_pred = nn.DataParallel(self.traj_pred, device_ids=[1, 0])
+
+    @staticmethod
+    def _init_weights(m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """
@@ -54,7 +60,7 @@ class MotionEstimation(nn.Module):
 
         return self.traj_pred(input)
 
-    def loss(self, feat_in: torch.Tensor, loc_gt: torch.Tensor, traj_gt: torch.Tensor, reduction="mean"):
+    def loss(self, feat_in: torch.Tensor, loc_gt: torch.Tensor, traj_gt: torch.Tensor):
         """
         compute loss according to the ground truth target location input
         :param feat_in: feature input of the target agent, torch.Tensor, [batch_size, in_channels]
@@ -65,9 +71,11 @@ class MotionEstimation(nn.Module):
         """
         assert feat_in.dim() == 2, "[MotionEstimation]: Error in feature input dimension."
         assert traj_gt.dim() == 2, "[MotionEstimation]: Error in trajectory gt dimension."
+        batch_size, _ = feat_in.size()
         traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
 
-        loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction=reduction)
+        loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction='sum')
+        loss /= batch_size          # average over batches
 
         # ====================================== DEBUG ====================================== #
         # print("[DEBUG]: traj_pred: \n{};".format(traj_pred.detach().cpu().numpy()))
