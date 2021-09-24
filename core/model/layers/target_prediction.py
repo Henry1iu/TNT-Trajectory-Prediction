@@ -59,6 +59,7 @@ class TargetPred(nn.Module):
         predict the target end position of the target agent from the target candidates
         :param feat_in: the encoded trajectory features, [batch_size, inchannels]
         :param tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
+        :param candidate_mask:
         :return:
         """
         # dimension must be [batch size, 1, in_channels]
@@ -90,8 +91,7 @@ class TargetPred(nn.Module):
              tar_candidate: torch.Tensor,
              candidate_gt: torch.Tensor,
              offset_gt: torch.Tensor,
-             candidate_mask=None,
-             reduction="mean"):
+             candidate_mask=None):
         """
         compute the loss for target prediction, classification gt is binary labels,
         only the closest candidate is labeled as 1
@@ -99,7 +99,7 @@ class TargetPred(nn.Module):
         :param tar_candidate: the target candidates for predicting the end position of the target agent, [batch_size, N, 2]
         :param candidate_gt: target prediction ground truth, classification gt and offset gt, [batch_size, N]
         :param offset_gt: the offset ground truth, [batch_size, 2]
-        :param reduction: the reduction to apply to the loss output
+        :param candidate_mask:
         :return:
         """
         batch_size, n, _ = tar_candidate.size()
@@ -114,7 +114,7 @@ class TargetPred(nn.Module):
             tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)      # [batch_size, n_tar]
 
         # classfication loss in n candidates
-        # n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction='sum')
+        # n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction='sum') / batch_size
 
         # classification loss in m selected candidates
         _, indices = tar_candit_prob.topk(self.M, dim=1)

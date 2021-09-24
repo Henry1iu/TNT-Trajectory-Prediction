@@ -86,7 +86,7 @@ class TrajScoreSelection(nn.Module):
 
         return F.softmax(self.score_mlp(input_tenor).squeeze(-1), dim=-1)
 
-    def loss(self, feat_in, traj_in, traj_gt, reduction="mean"):
+    def loss(self, feat_in, traj_in, traj_gt):
         """
         compute loss
         :param feat_in: input feature, torch.Tensor, [batch_size, feat_channels]
