@@ -26,33 +26,33 @@ class TargetPred(nn.Module):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
-        self.prob_mlp.apply(self._init_weights)
+        # self.prob_mlp.apply(self._init_weights)
 
         self.mean_mlp = nn.Sequential(
             nn.Linear(in_channels + 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 2)
         )
-        self.prob_mlp.apply(self._init_weights)
+        # self.prob_mlp.apply(self._init_weights)
 
         # self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
         # self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
 
-    @staticmethod
-    def _init_weights(m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
+    # @staticmethod
+    # def _init_weights(m):
+    #     if isinstance(m, nn.Linear):
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """
@@ -69,7 +69,7 @@ class TargetPred(nn.Module):
         batch_size, n, _ = tar_candidate.size()
 
         # stack the target candidates to the end of input feature
-        feat_in_repeat = torch.cat([feat_in.repeat(1, n, 1), tar_candidate.float()], dim=2)
+        feat_in_repeat = torch.cat([feat_in.repeat(1, n, 1), tar_candidate], dim=2)
 
         # compute probability for each candidate
         prob_tensor = self.prob_mlp(feat_in_repeat)
@@ -103,6 +103,9 @@ class TargetPred(nn.Module):
         :return:
         """
         batch_size, n, _ = tar_candidate.size()
+        _, num_cand = candidate_gt.size()
+
+        assert num_cand == n, "The num target candidate and the ground truth one-hot vector is not aligned: {} vs {};".format(n, num_cand)
 
         # pred prob and compute cls loss
         feat_in_prob = torch.cat([feat_in.unsqueeze(1).repeat(1, n, 1), tar_candidate], dim=2)
@@ -114,19 +117,24 @@ class TargetPred(nn.Module):
             tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)      # [batch_size, n_tar]
 
         # classfication loss in n candidates
-        # n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt, reduction='sum') / batch_size
+        n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt.float(), reduction='sum')
+        # n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt.float(), reduction='sum')
 
         # classification loss in m selected candidates
         _, indices = tar_candit_prob.topk(self.M, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
         # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
-        tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
-        candidate_gt_selected = candidate_gt[batch_idx, indices]
-        m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction='sum') / batch_size
+        # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
+        # candidate_gt_selected = candidate_gt[batch_idx, indices]
+        # m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction='sum') / batch_size
 
         # pred offset with gt candidate and compute regression loss
-        tar_offset_mean = self.mean_mlp(feat_in_prob)                                   # [batch_size, n_tar, 2]
-        offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction='sum') / batch_size
+        feat_in_offset = torch.cat([feat_in, tar_candidate[candidate_gt]], dim=-1)
+        offset_loss = F.smooth_l1_loss(self.mean_mlp(feat_in_offset), offset_gt, reduction='sum')
+        # isolate the loss computation from the candidate target offset prediction
+        tar_offset_mean = self.mean_mlp(feat_in_prob)                                    # [batch_size, 2]
+
+        # offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction='sum')
 
         # ====================================== DEBUG ====================================== #
         # # select the M output and check corresponding gt
@@ -156,8 +164,8 @@ class TargetPred(nn.Module):
         #                                                                 dst_gt.detach().cpu().numpy()))
         # ====================================== DEBUG ====================================== #
         # return n_candidate_loss + m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
-        # return n_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
-        return m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        return n_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        # return m_candidate_loss + offset_loss, tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
 
     def inference(self,
                   feat_in: torch.Tensor,
@@ -189,7 +197,7 @@ if __name__ == "__main__":
 
     # loss
     print("test loss")
-    candid_gt = torch.zeros((batch_size, N), dtype=torch.float)
+    candid_gt = torch.zeros((batch_size, N), dtype=torch.bool)
     candid_gt[:, 5] = 1.0
     offset_gt = torch.randn((batch_size, 2))
     loss = layer.loss(feat_tensor, tar_candi_tensor, candid_gt, offset_gt)

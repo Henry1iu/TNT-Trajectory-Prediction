@@ -58,19 +58,19 @@ class TrajScoreSelection(nn.Module):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
-        self.score_mlp.apply(self._init_weights)
+        # self.score_mlp.apply(self._init_weights)
         # self.score_mlp = nn.DataParallel(self.score_mlp, device_ids=[1, 0])
 
-    @staticmethod
-    def _init_weights(m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
+    # @staticmethod
+    # def _init_weights(m):
+    #     if isinstance(m, nn.Linear):
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
@@ -102,7 +102,8 @@ class TrajScoreSelection(nn.Module):
         # return F.mse_loss(score_pred, score_gt, reduction=reduction)
         logprobs = - torch.log(score_pred)
         batch = traj_in.shape[0]
-        loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        # loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        loss = torch.sum(torch.mul(logprobs, score_gt))
         # if reduction == 'mean':
         #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
         # else:

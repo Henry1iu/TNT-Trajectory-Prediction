@@ -51,14 +51,14 @@ class VectorNetBackbone(nn.Module):
                 nn.ReLU(),
                 nn.Linear(aux_mlp_width, self.polyline_vec_shape)
             )
-            self.aux_mlp.apply(self._init_weights)
+            # self.aux_mlp.apply(self._init_weights)
             # self.aux_mlp = nn.DataParallel(self.aux_mlp, device_ids=[1, 0])
 
-    @staticmethod
-    def _init_weights(m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
+    # @staticmethod
+    # def _init_weights(m):
+    #     if isinstance(m, nn.Linear):
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         m.bias.data.fill_(0.01)
 
     def forward(self, data):
         """

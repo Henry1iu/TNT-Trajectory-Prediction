@@ -203,7 +203,7 @@ class TNT(nn.Module):
         """
         raise NotImplementedError
 
-    def traj_selection(self, traj_in, score, threshold=0.16):
+    def traj_selection(self, traj_in, score, threshold=0.01):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -215,7 +215,7 @@ class TNT(nn.Module):
         _, batch_order = score.sort(descending=True)
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
         traj_selected = torch.zeros_like(traj_pred[:, :self.k])           # [batch_size, k, horizon * 2]
-        traj_selected[:, 0] = traj_selected[:, 0]
+        traj_selected[:, 0] = traj_pred[:, 0]
 
         # # check the distance between them, NMS
         # for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
@@ -225,7 +225,6 @@ class TNT(nn.Module):
         #         if not torch.any(dis < threshold):                       # not exist similar trajectory
         #             traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
         #             traj_cnt += 1
-        #
         #         if traj_cnt >= self.k:
         #             break                                                       # break if collect enough traj
         #
@@ -263,7 +262,8 @@ class TNT(nn.Module):
 
 if __name__ == "__main__":
     batch_size = 32
-    DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    # DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')

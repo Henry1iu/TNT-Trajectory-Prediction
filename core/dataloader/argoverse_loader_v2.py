@@ -134,7 +134,7 @@ class ArgoverseInMem(InMemoryDataset):
 
         # pad feature with zero nodes
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
-        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)])
+        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)]).short()
         data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.x.dtype)])
 
         # pad candidate and candidate_gt
@@ -142,7 +142,7 @@ class ArgoverseInMem(InMemoryDataset):
         data.candidate_mask = torch.cat([torch.ones((len(data.candidate), 1)),
                                          torch.zeros((num_cand_max - len(data.candidate), 1))])
         data.candidate = torch.cat([data.candidate, torch.zeros((num_cand_max - len(data.candidate), 2))])
-        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))])
+        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))]).bool()
 
         return data
 

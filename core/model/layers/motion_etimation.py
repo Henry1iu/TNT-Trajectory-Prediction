@@ -25,9 +25,9 @@ class MotionEstimation(nn.Module):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, horizon * 2)
         )
         self.traj_pred.apply(self._init_weights)
@@ -75,7 +75,7 @@ class MotionEstimation(nn.Module):
         traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
 
         loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction='sum')
-        loss /= batch_size          # average over batches
+        # loss /= batch_size          # average over batches
 
         # ====================================== DEBUG ====================================== #
         # print("[DEBUG]: traj_pred: \n{};".format(traj_pred.detach().cpu().numpy()))
