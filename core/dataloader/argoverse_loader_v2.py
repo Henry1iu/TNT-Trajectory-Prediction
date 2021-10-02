@@ -195,12 +195,14 @@ class ArgoverseInMem(InMemoryDataset):
         for cluster_idc in np.unique(cluster):
             [indices] = np.where(cluster == cluster_idc)
             identifier = np.vstack([identifier, np.min(feats[indices, :2], axis=0)])
+
             if len(indices) <= 1:
                 continue                # skip if only 1 node
-            if cluster_idc < traj_cnt:
-                edge_index = np.hstack([edge_index, get_traj_edge_index(indices)])
-            else:
-                edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
+            edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
+            # if cluster_idc < traj_cnt:
+            #     edge_index = np.hstack([edge_index, get_traj_edge_index(indices)])
+            # else:
+            #     edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
         return feats, cluster, edge_index, identifier
 
     @staticmethod

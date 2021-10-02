@@ -58,9 +58,9 @@ class TrajScoreSelection(nn.Module):
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            # nn.Linear(hidden_dim, hidden_dim),
+            # nn.LayerNorm(hidden_dim),
+            # nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, 1)
         )
 

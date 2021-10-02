@@ -4,7 +4,8 @@
 #python train_tnt.py -d dataset/interm_tnt_n_s -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.001
 #python train_tnt.py -d dataset/interm_tnt_n_s -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.003
 
-python train_tnt.py -d dataset/interm_tnt_n_s_0727 -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0010 -luf 5 -ldr 0.3
+python train_tnt.py -d dataset/interm_tnt_n_s_0804 -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0010 -we 30 -luf 5 -ldr 0.3
+python train_tnt.py -d dataset/interm_tnt_n_s_0923 -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0010 -we 30 -luf 5 -ldr 0.3
 #python train_tnt.py -d dataset/interm_tnt_n_s_0727 -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0013 -luf 5 -ldr 0.3
 # python train_tnt.py -d dataset/interm_tnt_n_s_0624 -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.0015 -luf 5 -ldr 0.3
 # python train_tnt.py -d dataset/interm_tnt_n_s_0624 -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.0017 -luf 5 -ldr 0.3
