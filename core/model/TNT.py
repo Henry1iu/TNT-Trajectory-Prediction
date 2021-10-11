@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import DataLoader
 
-from core.model.backbone.vectornet import VectorNetBackbone
-# from core.model.backbone.vectornet_v2 import VectorNetBackbone
+# from core.model.backbone.vectornet import VectorNetBackbone
+from core.model.backbone.vectornet_v2 import VectorNetBackbone
 from core.model.layers.target_prediction import TargetPred
 # from core.model.layers.target_prediction_v2 import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
@@ -35,7 +35,7 @@ class TNT(nn.Module):
                  k=6,
                  lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=0.1,
+                 lambda3=1.0,
                  device=torch.device("cpu"),
                  multi_gpu: bool = False):
         """
@@ -121,7 +121,7 @@ class TNT(nn.Module):
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]
-        target_feat = global_feat[:, 0]
+        target_feat = global_feat[:, 0].unsqueeze(1)
 
         # predict the prob. of target candidates and selected the most likely M candidate
         target_pred, offset_pred = self.target_pred_layer(target_feat, target_candidate)
@@ -137,7 +137,7 @@ class TNT(nn.Module):
 
         return self.traj_selection(traj_pred, score)
 
-    def loss(self, data, reduction="sum"):
+    def loss(self, data):
         """
         compute loss according to the gt
         :param data: node feature data
@@ -151,12 +151,12 @@ class TNT(nn.Module):
         batch_size, _, _ = target_candidate.size()
 
         global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
-        target_feat = global_feat[:, 0]
+        target_feat = global_feat[:, 0].unsqueeze(1)
 
         loss = 0.0
         if self.with_aux and self.training:
-            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
-            loss += aux_loss
+            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction='sum')
+            loss += (aux_loss / batch_size)
 
         candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
 
@@ -168,8 +168,7 @@ class TNT(nn.Module):
             target_candidate,
             candidate_gt,
             offset_gt,
-            candidate_mask=candidate_mask,
-            reduction=reduction
+            candidate_mask=candidate_mask
         )
         loss += self.lambda1 * target_loss
 
@@ -178,8 +177,7 @@ class TNT(nn.Module):
         traj_loss = self.motion_estimator.loss(
             target_feat,
             location_gt,
-            traj_gt,
-            reduction=reduction
+            traj_gt
         )
         loss += self.lambda2 * traj_loss
 
@@ -188,8 +186,7 @@ class TNT(nn.Module):
         score_loss = self.traj_score_layer.loss(
             target_feat,
             traj_pred,
-            traj_gt,
-            reduction=reduction
+            traj_gt
         )
         loss += self.lambda3 * score_loss
 
@@ -220,22 +217,7 @@ class TNT(nn.Module):
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
         traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
 
-        # # check the distance between them, NMS
-        # for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
-        #     traj_cnt = 1
-        #     for i in range(1, self.m):
-        #         dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, i].unsqueeze(0))
-        #         if not torch.any(dis < threshold):                       # not exist similar trajectory
-        #             traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
-        #             traj_cnt += 1
-        #
-        #         if traj_cnt >= self.k:
-        #             break                                                       # break if collect enough traj
-        #
-        #     # no enough traj, pad zero traj
-        #     if traj_cnt < self.k:
-        #         traj_selected[:, traj_cnt:] = 0.0
-
+        # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
             traj_cnt = 1
             while traj_cnt < self.k:
@@ -243,6 +225,7 @@ class TNT(nn.Module):
                     dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, j].unsqueeze(0))
                     if not torch.any(dis < threshold):
                         traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, j]
+
                         traj_cnt += 1
                     if traj_cnt >= self.k:
                         break
@@ -266,18 +249,19 @@ class TNT(nn.Module):
 if __name__ == "__main__":
     batch_size = 32
     DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    # DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
 
     dataset = ArgoverseInMem(TRAIN_DIR)
-    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16, pin_memory=True)
+    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=1, pin_memory=True)
 
     m = 50
     k = 6
 
-    device = torch.device("cuda:1")
-    # device = torch.device("cpu")
+    # device = torch.device("cuda:1")
+    device = torch.device("cpu")
 
     model = TNT(in_channels=dataset.num_features, m=m, k=k, with_aux=True, device=device).to(device)
     model.train()

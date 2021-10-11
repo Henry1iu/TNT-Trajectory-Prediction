@@ -2,19 +2,12 @@ import os
 import sys
 from os.path import join as pjoin
 from datetime import datetime
-import tracemalloc
 
 import argparse
 
-# from torch.utils.data import DataLoader
-from torch_geometric.data import DataLoader
-
-from core.dataloader.dataset import GraphDataset
 from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
 from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2
 from core.trainer.tnt_trainer import TNTTrainer
-
-TEST = False
 
 sys.path.append("core/dataloader")
 
@@ -25,17 +18,6 @@ def train(args):
     :param args:
     :return:
     """
-    # data loading
-    # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
-    # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-    # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
-
-    # train_set = Argoverse(pjoin(args.data_root, "train_intermediate")).shuffle()
-    # train_set = Argoverse(pjoin(args.data_root, "val_intermediate")).shuffle()
-    # eval_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
-    # test_set = Argoverse(pjoin(args.data_root, "val_intermediate"))
-    # tracemalloc.start()
-
     train_set = ArgoverseInMemv2(pjoin(args.data_root, "train_intermediate")).shuffle()
     eval_set = ArgoverseInMemv2(pjoin(args.data_root, "val_intermediate"))
 
@@ -55,11 +37,11 @@ def train(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         lr=args.lr,
-        weight_decay=args.adam_weight_decay,
-        betas=(args.adam_beta1, args.adam_beta2),
         warmup_epoch=args.warmup_epoch,
         lr_update_freq=args.lr_update_freq,
         lr_decay_rate=args.lr_decay_rate,
+        weight_decay=args.adam_weight_decay,
+        betas=(args.adam_beta1, args.adam_beta2),
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
@@ -74,17 +56,10 @@ def train(args):
     min_eval_loss = trainer.min_eval_loss
 
     # training
-    # snapshot = tracemalloc.take_snapshot()
-    # top_stats = snapshot.statistics('lineno')
-    # print("[ Top 10 ]")
-    # for stat in top_stats[:10]:
-    #     print(stat)\
-
     for iter_epoch in range(args.n_epoch):
         _ = trainer.train(iter_epoch)
 
         eval_loss = trainer.eval(iter_epoch)
-        # eval_loss = 1.0
 
         if not min_eval_loss:
             min_eval_loss = eval_loss
@@ -94,13 +69,6 @@ def train(args):
 
             trainer.save(iter_epoch, min_eval_loss)
             trainer.save_model("best")
-
-        # snapshot = tracemalloc.take_snapshot()
-        # top_stats = snapshot.statistics('lineno')
-        #
-        # print("[ Top 10 ]")
-        # for stat in top_stats[:10]:
-        #     print(stat)
 
     trainer.save_model("final")
 
@@ -136,20 +104,18 @@ if __name__ == "__main__":
     # parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=3e-3, help="learning rate of adam")
-    parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
     parser.add_argument("-we", "--warmup_epoch", type=int, default=20,
                         help="the number of warmup epoch with initial learning rate, after the learning rate decays")
     parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
                         help="learning rate decay frequency for lr scheduler")
     parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")
+    parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
+    parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
+    parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
 
     parser.add_argument("-rc", "--resume_checkpoint", type=str,
-                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/08-04-16-38/checkpoint_iter30.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/08-04-16-38/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()

@@ -116,8 +116,10 @@ class ArgoversePreprocessor(Preprocessor):
     def get_obj_feats(self, data):
         # get the origin and compute the oritentation of the target agent
         orig = data['trajs'][0][self.obs_horizon-1].copy().astype(np.float32)
-        pre = (data['trajs'][0][self.obs_horizon-3] - orig) / 2.0
-        theta = np.pi - np.arctan2(pre[1], pre[0])
+        pre, conf, _ = self.am.get_lane_direction_traj(traj=data['trajs'][0][:self.obs_horizon], city_name=data['city'])
+        if conf <= 0.1:
+            pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
+        theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
         rot = np.asarray([
             [np.cos(theta), -np.sin(theta)],
             [np.sin(theta), np.cos(theta)]], np.float32)
@@ -125,7 +127,7 @@ class ArgoversePreprocessor(Preprocessor):
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
         agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
-        ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
+        ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
         # rotate the center lines and find the reference center line
         agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
@@ -395,7 +397,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0804"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0923"
 
     for split in ["train", "val"]:
         # construct the preprocessor and dataloader

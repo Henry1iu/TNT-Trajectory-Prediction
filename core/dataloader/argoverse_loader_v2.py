@@ -1,9 +1,7 @@
 import sys
 import os
-import os.path as osp
 import numpy as np
 import pandas as pd
-import re
 from tqdm import tqdm
 
 import gc
@@ -64,6 +62,8 @@ class ArgoverseInMem(InMemoryDataset):
 
     @property
     def raw_file_names(self):
+        if not os.path.exists(self.raw_dir):
+            return None
         return [file for file in os.listdir(self.raw_dir) if "features" in file and file.endswith(".pkl")]
 
     @property
@@ -135,8 +135,9 @@ class ArgoverseInMem(InMemoryDataset):
         valid_len = data.valid_len[0].item()
 
         # pad feature with zero nodes
+        assert data.x.size()[0] == data.cluster.size()[0], ""
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
-        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)])
+        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)]).long()
         data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.x.dtype)])
 
         # pad candidate and candidate_gt
@@ -144,7 +145,7 @@ class ArgoverseInMem(InMemoryDataset):
         data.candidate_mask = torch.cat([torch.ones((len(data.candidate), 1)),
                                          torch.zeros((num_cand_max - len(data.candidate), 1))])
         data.candidate = torch.cat([data.candidate, torch.zeros((num_cand_max - len(data.candidate), 2))])
-        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))])
+        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))]).bool()
 
         return data
 
@@ -210,7 +211,7 @@ class ArgoverseInMem(InMemoryDataset):
         traj_obs = data_seq['feats'].values[0][0]
         traj_fut = data_seq['gt_preds'].values[0][0]
         offset_fut = np.vstack([traj_fut[0, :] - traj_obs[-1, :2], traj_fut[1:, :] - traj_fut[:-1, :]])
-        return offset_fut.reshape(-1).astype(np.float32)
+        return offset_fut.reshape(1, -1).astype(np.float32)
 
 
 if __name__ == "__main__":
