@@ -100,16 +100,16 @@ class TrajScoreSelection(nn.Module):
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        return F.mse_loss(score_pred, score_gt, reduction='sum')
-        # logprobs = - torch.log(score_pred)
+        # return F.mse_loss(score_pred, score_gt, reduction='sum')
+        logprobs = - torch.log(score_pred)
 
         # loss = torch.sum(torch.mul(logprobs, score_gt)) / batch_size
-        # loss = torch.sum(torch.mul(logprobs, score_gt))
+        loss = torch.sum(torch.mul(logprobs, score_gt))
         # if reduction == 'mean':
         #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch_size
         # else:
         #     loss = torch.sum(torch.mul(logprobs, score_gt))
-        # return loss
+        return loss
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
