@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 
 from core.model.layers.utils import masked_softmax
+from core.model.layers.basic_module import MLP
 
 
 class TargetPred(nn.Module):
@@ -21,38 +22,36 @@ class TargetPred(nn.Module):
 
         self.device = device
 
+        # self.prob_mlp = nn.Sequential(
+        #     nn.Linear(in_channels + 2, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     # nn.LeakyReLU(inplace=True),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, 1)
+        # )
+        #
+        # self.mean_mlp = nn.Sequential(
+        #     nn.Linear(in_channels + 2, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     # nn.LeakyReLU(inplace=True),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, 2)
+        # )
         self.prob_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
-            # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            MLP(in_channels + 2, hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, 1)
         )
-        # self.prob_mlp.apply(self._init_weights)
 
         self.mean_mlp = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
-            # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            MLP(in_channels + 2, hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, 2)
         )
-        # self.prob_mlp.apply(self._init_weights)
-
-        # self.prob_mlp = nn.DataParallel(self.prob_mlp, device_ids=[1, 0])
-        # self.mean_mlp = nn.DataParallel(self.mean_mlp, device_ids=[1, 0])
-
-    # @staticmethod
-    # def _init_weights(m):
-    #     if isinstance(m, nn.Linear):
-    #         torch.nn.init.xavier_uniform_(m.weight)
-    #         m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """

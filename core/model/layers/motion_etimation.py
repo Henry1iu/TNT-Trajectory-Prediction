@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.model.layers.basic_module import MLP
+
 
 class MotionEstimation(nn.Module):
     def __init__(self,
@@ -20,24 +22,20 @@ class MotionEstimation(nn.Module):
         self.horizon = horizon
         self.hidden_dim = hidden_dim
 
+        # self.traj_pred = nn.Sequential(
+        #     nn.Linear(in_channels + 2, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     # nn.LeakyReLU(inplace=True),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, horizon * 2)
+        # )
         self.traj_pred = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
-            # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            MLP(in_channels + 2, hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, horizon * 2)
         )
-        self.traj_pred.apply(self._init_weights)
-        # self.traj_pred = nn.DataParallel(self.traj_pred, device_ids=[1, 0])
-
-    @staticmethod
-    def _init_weights(m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """
