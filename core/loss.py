@@ -22,7 +22,7 @@ class VectorLoss(nn.Module):
 
     def forward(self, pred, gt, aux_pred=None, aux_gt=None):
 
-        l_traj = F.gaussian_nll_loss(pred, gt, reduction=self.reduction)
+        l_traj = F.mse_loss(pred, gt, reduction=self.reduction)
 
         loss = l_traj
         if self.aux_loss:
