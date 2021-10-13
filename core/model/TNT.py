@@ -35,7 +35,7 @@ class TNT(nn.Module):
                  k=6,
                  lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=1.0,
+                 lambda3=0.1,
                  device=torch.device("cpu"),
                  multi_gpu: bool = False):
         """
@@ -104,11 +104,6 @@ class TNT(nn.Module):
             device=self.device
         )
         self._init_weight()
-
-        # if multi_gpu:
-        #     self.target_pred_layer = nn.DataParallel(self.target_pred_layer)
-        #     self.motion_estimator = nn.DataParallel(self.motion_estimator)
-        #     self.traj_score_layer = nn.DataParallel(self.traj_score_layer)
 
     def forward(self, data):
         """
