@@ -126,10 +126,12 @@ class TargetPred(nn.Module):
         # m_candidate_loss = F.binary_cross_entropy(tar_pred_prob_selected, candidate_gt_selected, reduction='sum') / batch_size
 
         # pred offset with gt candidate and compute regression loss
-        feat_in_offset = torch.cat([feat_in.squeeze(1), tar_candidate[candidate_gt]], dim=-1)
-        offset_loss = F.smooth_l1_loss(self.mean_mlp(feat_in_offset), offset_gt, reduction='sum')
+        # feat_in_offset = torch.cat([feat_in.squeeze(1), tar_candidate[candidate_gt]], dim=-1)
+        # offset_loss = F.smooth_l1_loss(self.mean_mlp(feat_in_offset), offset_gt, reduction='sum')
+
         # isolate the loss computation from the candidate target offset prediction
         tar_offset_mean = self.mean_mlp(feat_in_prob)                                    # [batch_size, 2]
+        offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction='sum')
 
         # ====================================== DEBUG ====================================== #
         # # select the M output and check corresponding gt
