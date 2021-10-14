@@ -24,7 +24,7 @@ class TargetPred(nn.Module):
 
         self.prob_mlp = nn.Sequential(
             MLP(in_channels + 2, hidden_dim, hidden_dim),
-            nn.Linear(hidden_dim, 2)
+            nn.Linear(hidden_dim, 1)
         )
 
         self.mean_mlp = nn.Sequential(
@@ -49,11 +49,11 @@ class TargetPred(nn.Module):
         feat_in_repeat = torch.cat([feat_in.repeat(1, n, 1), tar_candidate], dim=2)
 
         # compute probability for each candidate
-        prob_tensor = self.prob_mlp(feat_in_repeat)
+        prob_tensor = self.prob_mlp(feat_in_repeat).squeeze(2)
         if not isinstance(candidate_mask, torch.Tensor):
-            tar_candit_prob = F.softmax(prob_tensor, dim=-1)                                    # [batch_size, n_tar, 2]
+            tar_candit_prob = F.softmax(prob_tensor, dim=-1)                                    # [batch_size, n_tar, 1]
         else:
-            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=-1)               # [batch_size, n_tar, 2]
+            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=-1)               # [batch_size, n_tar, 1]
         tar_offset_mean = self.mean_mlp(feat_in_repeat)                                         # [batch_size, n_tar, 2]
 
         return tar_candit_prob, tar_offset_mean

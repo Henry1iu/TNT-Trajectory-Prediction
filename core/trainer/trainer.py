@@ -233,10 +233,10 @@ class Trainer(object):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    # out = self.model.module(data.to(self.device))
-                    out = self.model(data.to(self.device))
+                    out = self.model.module.inference(data.to(self.device))
+                    # out = self.model(data.to(self.device))
                 else:
-                    out = self.model(data.to(self.device))
+                    out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)
                 pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
 

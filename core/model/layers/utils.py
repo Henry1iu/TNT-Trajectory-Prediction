@@ -51,7 +51,9 @@ def masked_softmax(vector, mask, dim=-1, memory_efficient=True, mask_fill_value=
             result = F.softmax(vector * mask, dim=dim)
             result = result * mask
             result = result / (result.sum(dim=dim, keepdim=True) + 1e-13)
+            result = result.masked_fill((1 - mask).bool(), 0.0)
         else:
             masked_vector = vector.masked_fill((1 - mask).bool(), mask_fill_value)
             result = F.softmax(masked_vector, dim=dim)
+            result = result.masked_fill((1 - mask).bool(), 0.0)
     return result

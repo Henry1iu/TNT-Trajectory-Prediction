@@ -139,7 +139,7 @@ class TNT(nn.Module):
         traj_with_gt = self.motion_estimator(target_feat, target_gt)
 
         # predict the trajectories for the M most-likely predicted target, and the score
-        _, indices = target_prob[:,:,1].topk(self.m, dim=1)
+        _, indices = target_prob.topk(self.m, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
         target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset[batch_idx, indices]
         trajs = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
@@ -271,7 +271,6 @@ if __name__ == "__main__":
     model.eval()
 
     for i, data in enumerate(tqdm(data_iter)):
-        x = data.x
         loss, _ = model.loss(data.to(device))
         # loss = model.loss(data.to(device))
         # print("loss dtype:{}".format(loss.dtype))

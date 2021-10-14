@@ -162,10 +162,14 @@ class TNTTrainer(Trainer):
 
                 # writing loss
                 self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Cls_Loss", loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Offset_Loss", loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Traj_Loss", loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Score_Loss", loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Cls_Loss",
+                               loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Offset_Loss",
+                               loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Traj_Loss",
+                               loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Score_Loss",
+                               loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
@@ -177,12 +181,14 @@ class TNTTrainer(Trainer):
 
                     # writing loss
                     self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Target_Loss(Eval)",
-                                   loss_dict["target_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Traj_Loss(Eval)",
-                                   loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Score_Loss(Eval)",
-                                   loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Target_Cls_Loss(Eval)",
+                    #                loss_dict["tar_cls_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Target_Offset_Loss(Eval)",
+                    #                loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Traj_Loss(Eval)",
+                    #                loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Score_Loss(Eval)",
+                    #                loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
             avg_loss += loss.detach().item()
