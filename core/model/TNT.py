@@ -13,6 +13,7 @@ from core.model.layers.target_prediction import TargetPred
 # from core.model.layers.target_prediction_v2 import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
 from core.model.layers.scoring_and_selection import TrajScoreSelection, distance_metric
+from core.loss import TNTLoss
 
 from core.dataloader.argoverse_loader_v2 import GraphData, ArgoverseInMem
 
@@ -72,6 +73,7 @@ class TNT(nn.Module):
         self.with_aux = with_aux
 
         self.device = device
+        self.criterion = TNTLoss(self.lambda1, self.lambda2, self.lambda3, temperature, with_aux=self.with_aux)
 
         # feature extraction backbone
         self.backbone = VectorNetBackbone(
