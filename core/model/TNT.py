@@ -73,7 +73,9 @@ class TNT(nn.Module):
         self.with_aux = with_aux
 
         self.device = device
-        self.criterion = TNTLoss(self.lambda1, self.lambda2, self.lambda3, temperature, with_aux=self.with_aux)
+        self.criterion = TNTLoss(
+            self.lambda1, self.lambda2, self.lambda3, temperature, aux_loss=self.with_aux, device=self.device
+        )
 
         # feature extraction backbone
         self.backbone = VectorNetBackbone(
@@ -109,6 +111,67 @@ class TNT(nn.Module):
 
     def forward(self, data):
         """
+        output prediction for training
+        :param data: observed sequence data
+        :return: dict{
+                        "target_prob":  the predicted probability of each target candidate,
+                        "offset":       the predicted offset of the target position from the gt target candidate,
+                        "traj_with_gt": the predicted trajectory with the gt target position as the input,
+                        "traj":         the predicted trajectory without the gt target position,
+                        "score":        the predicted score for each predicted trajectory,
+                     }
+        """
+        n = data.candidate_len_max[0]
+
+        target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
+        batch_size, _, _ = target_candidate.size()
+        candidate_mask = data.candidate_mask.view(-1, n)
+
+        # feature encoding
+        global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
+        target_feat = global_feat[:, 0].unsqueeze(1)
+
+        # predict prob. for each target candidate, and corresponding offest
+        target_prob, offset = self.target_pred_layer(target_feat, target_candidate, candidate_mask)
+
+        # predict the trajectory given the target gt
+        target_gt = data.target_gt.view(-1, 1, 2)
+        traj_with_gt = self.motion_estimator(target_feat, target_gt)
+
+        # predict the trajectories for the M most-likely predicted target, and the score
+        _, indices = target_prob[:,:,1].topk(self.m, dim=1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
+        target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset[batch_idx, indices]
+        trajs = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
+        score = self.traj_score_layer(target_feat, trajs)
+
+        return {
+            "target_prob": target_prob,
+            "offset": offset,
+            "traj_with_gt": traj_with_gt,
+            "traj": trajs,
+            "score": score
+        }, aux_out, aux_gt
+
+    def loss(self, data):
+        """
+        compute loss according to the gt
+        :param data: node feature data
+        :return: loss
+        """
+        n = data.candidate_len_max[0]
+        pred, aux_out, aux_gt = self.forward(data)
+
+        gt = {
+            "target_prob": data.candidate_gt.view(-1, n),
+            "offset": data.offset_gt.view(-1, 2),
+            "y": data.y.view(-1, self.horizon * 2)
+        }
+
+        return self.criterion(pred, gt, aux_out, aux_gt)
+
+    def inference(self, data):
+        """
         predict the top k most-likely trajectories
         :param data: observed sequence data
         :return:
@@ -121,76 +184,21 @@ class TNT(nn.Module):
         target_feat = global_feat[:, 0].unsqueeze(1)
 
         # predict the prob. of target candidates and selected the most likely M candidate
-        target_pred, offset_pred = self.target_pred_layer(target_feat, target_candidate)
+        target_prob, offset_pred = self.target_pred_layer(target_feat, target_candidate)
+        _, indices = target_prob.topk(self.M, dim=1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset_pred[batch_idx, indices]
 
         # # DEBUG
         # gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1)
 
         # trajectory estimation for the m predicted target location
-        traj_pred = self.motion_estimator(target_feat, target_pred+offset_pred)
+        traj_pred = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
 
         # score the predicted trajectory and select the top k trajectory
         score = self.traj_score_layer(target_feat, traj_pred)
 
         return self.traj_selection(traj_pred, score)
-
-    def loss(self, data):
-        """
-        compute loss according to the gt
-        :param data: node feature data
-        :param gt: ground truth data
-        :param reduction: reduction method, "mean", "sum"
-        :return:
-        """
-        n = data.candidate_len_max[0]
-
-        target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
-        batch_size, _, _ = target_candidate.size()
-
-        global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
-        target_feat = global_feat[:, 0].unsqueeze(1)
-
-        loss = 0.0
-        if self.with_aux and self.training:
-            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction='sum')
-            loss += (aux_loss / batch_size)
-
-        candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
-
-        # add the target prediction loss
-        candidate_gt, offset_gt = candidate_gt.view(-1, n), offset_gt.view(-1, 2)
-        candidate_mask = data.candidate_mask.view(-1, n)
-        target_loss, pred_tar, pred_offset = self.target_pred_layer.loss(
-            target_feat,
-            target_candidate,
-            candidate_gt,
-            offset_gt,
-            candidate_mask=candidate_mask
-        )
-        loss += self.lambda1 * target_loss
-
-        # add the motion estimation loss
-        location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
-        traj_loss = self.motion_estimator.loss(
-            target_feat,
-            location_gt,
-            traj_gt
-        )
-        loss += self.lambda2 * traj_loss
-
-        # add the score and selection loss
-        traj_pred = self.motion_estimator(target_feat, pred_tar+pred_offset)
-        score_loss = self.traj_score_layer.loss(
-            target_feat,
-            traj_pred,
-            traj_gt
-        )
-        loss += self.lambda3 * score_loss
-
-        return loss, {"target_loss": target_loss, "traj_loss": traj_loss, "score_loss": score_loss}
-
-    def inference(self, data):
-        raise NotImplementedError
 
     def candidate_sampling(self, data):
         """
@@ -201,7 +209,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.04):
+    def traj_selection(self, traj_in, score, threshold=0.01):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]
@@ -212,7 +220,7 @@ class TNT(nn.Module):
         # re-arrange trajectories according the the descending order of the score
         _, batch_order = score.sort(descending=True)
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
-        traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
+        traj_selected = traj_pred[:, :self.k]                                   # [batch_size, k, horizon * 2]
 
         # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
@@ -234,7 +242,6 @@ class TNT(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.kaiming_normal_(module.weight)
-                # module.weight.data.kaiming_uniform_(module)
             elif isinstance(module, nn.BatchNorm2d):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
@@ -261,10 +268,12 @@ if __name__ == "__main__":
     device = torch.device("cpu")
 
     model = TNT(in_channels=dataset.num_features, m=m, k=k, with_aux=True, device=device).to(device)
-    model.train()
+    model.eval()
 
     for i, data in enumerate(tqdm(data_iter)):
+        x = data.x
         loss, _ = model.loss(data.to(device))
+        # loss = model.loss(data.to(device))
         # print("loss dtype:{}".format(loss.dtype))
 
         # pred = model(data.to(device))

@@ -116,7 +116,6 @@ class TrajScoreSelection(nn.Module):
         :param traj_in: candidate trajectories, torch.Tensor, [batch_size, M, horizon * 2]
         :return: [batch_size, M]
         """
-        # todo: implement greedy selection algorithm
         return self.forward(feat_in, traj_in)
 
 

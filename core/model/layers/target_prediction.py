@@ -22,30 +22,9 @@ class TargetPred(nn.Module):
 
         self.device = device
 
-        # self.prob_mlp = nn.Sequential(
-        #     nn.Linear(in_channels + 2, hidden_dim),
-        #     nn.LayerNorm(hidden_dim),
-        #     nn.ReLU(inplace=True),
-        #     # nn.LeakyReLU(inplace=True),
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.LayerNorm(hidden_dim),
-        #     nn.ReLU(inplace=True),
-        #     nn.Linear(hidden_dim, 1)
-        # )
-        #
-        # self.mean_mlp = nn.Sequential(
-        #     nn.Linear(in_channels + 2, hidden_dim),
-        #     nn.LayerNorm(hidden_dim),
-        #     nn.ReLU(inplace=True),
-        #     # nn.LeakyReLU(inplace=True),
-        #     nn.Linear(hidden_dim, hidden_dim),
-        #     nn.LayerNorm(hidden_dim),
-        #     nn.ReLU(inplace=True),
-        #     nn.Linear(hidden_dim, 2)
-        # )
         self.prob_mlp = nn.Sequential(
             MLP(in_channels + 2, hidden_dim, hidden_dim),
-            nn.Linear(hidden_dim, 1)
+            nn.Linear(hidden_dim, 2)
         )
 
         self.mean_mlp = nn.Sequential(
@@ -56,9 +35,9 @@ class TargetPred(nn.Module):
     def forward(self, feat_in: torch.Tensor, tar_candidate: torch.Tensor, candidate_mask=None):
         """
         predict the target end position of the target agent from the target candidates
-        :param feat_in: the encoded trajectory features, [batch_size, inchannels]
-        :param tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
-        :param candidate_mask:
+        :param feat_in:        the encoded trajectory features, [batch_size, inchannels]
+        :param tar_candidate:  the target position candidate (x, y), [batch_size, N, 2]
+        :param candidate_mask: the mask of valid target candidate
         :return:
         """
         # dimension must be [batch size, 1, in_channels]
@@ -72,17 +51,12 @@ class TargetPred(nn.Module):
         # compute probability for each candidate
         prob_tensor = self.prob_mlp(feat_in_repeat)
         if not isinstance(candidate_mask, torch.Tensor):
-            tar_candit_prob = F.softmax(prob_tensor, dim=1).squeeze(-1)                         # [batch_size, n_tar, 1]
+            tar_candit_prob = F.softmax(prob_tensor, dim=-1)                                    # [batch_size, n_tar, 2]
         else:
-            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)    # [batch_size, n_tar, 1]
+            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=-1)               # [batch_size, n_tar, 2]
         tar_offset_mean = self.mean_mlp(feat_in_repeat)                                         # [batch_size, n_tar, 2]
 
-        # compute the prob. of normal distribution
-        # offset = torch.normal(tar_offset_mean, std=1.0)
-
-        _, indices = tar_candit_prob.topk(self.M, dim=1)
-        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
-        return tar_candidate[batch_idx, indices], tar_offset_mean[batch_idx, indices]
+        return tar_candit_prob, tar_offset_mean
 
     def loss(self,
              feat_in: torch.Tensor,
@@ -106,19 +80,13 @@ class TargetPred(nn.Module):
         assert num_cand == n, "The num target candidate and the ground truth one-hot vector is not aligned: {} vs {};".format(n, num_cand)
 
         # pred prob and compute cls loss
-        feat_in_prob = torch.cat([feat_in.repeat(1, n, 1), tar_candidate], dim=2)
-        prob_tensor = self.prob_mlp(feat_in_prob)
-        # print("prob_tensor size: {};".format(prob_tensor.shape))
-        if not isinstance(candidate_mask, torch.Tensor):
-            tar_candit_prob = F.softmax(prob_tensor, dim=1).squeeze(-1)                           # [batch_size, n_tar]
-        else:
-            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=1).squeeze(-1)      # [batch_size, n_tar]
+        tar_candit_prob, tar_offset_mean = self.forward(feat_in, tar_candidate, candidate_mask)
 
         # classfication loss in n candidates
-        n_candidate_loss = F.binary_cross_entropy(tar_candit_prob, candidate_gt.float(), reduction='sum')
+        n_candidate_loss = F.cross_entropy(tar_candit_prob.transpose(1, 2), candidate_gt.long(), reduction='sum')
 
         # classification loss in m selected candidates
-        _, indices = tar_candit_prob.topk(self.M, dim=1)
+        _, indices = tar_candit_prob[:, :, 1].topk(self.M, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
         # tar_pred_prob_selected = F.normalize(tar_candit_prob[batch_idx, indices], dim=-1)
         # tar_pred_prob_selected = tar_candit_prob[batch_idx, indices]
@@ -130,7 +98,6 @@ class TargetPred(nn.Module):
         # offset_loss = F.smooth_l1_loss(self.mean_mlp(feat_in_offset), offset_gt, reduction='sum')
 
         # isolate the loss computation from the candidate target offset prediction
-        tar_offset_mean = self.mean_mlp(feat_in_prob)                                    # [batch_size, 2]
         offset_loss = F.smooth_l1_loss(tar_offset_mean[candidate_gt.bool()], offset_gt, reduction='sum')
 
         # ====================================== DEBUG ====================================== #
@@ -166,14 +133,23 @@ class TargetPred(nn.Module):
 
     def inference(self,
                   feat_in: torch.Tensor,
-                  tar_candidate: torch.Tensor):
+                  tar_candidate: torch.Tensor,
+                  candidate_mask=None):
         """
         output only the M predicted propablity of the predicted target
-        :param feat_in: the encoded trajectory features, [batch_size, inchannels]
-        :param tar_candidate: tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
+        :param feat_in:        the encoded trajectory features, [batch_size, inchannels]
+        :param tar_candidate:  tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
+        :param candidate_mask: the mask of valid target candidate
         :return:
         """
-        pass
+        """
+        predict the target end position of the target agent from the target candidates
+        :param feat_in: the encoded trajectory features, [batch_size, inchannels]
+        :param tar_candidate: the target position candidate (x, y), [batch_size, N, 2]
+        :param candidate_mask:
+        :return:
+        """
+        return self.forward(feat_in, tar_candidate, candidate_mask)
 
 
 if __name__ == "__main__":
@@ -185,12 +161,11 @@ if __name__ == "__main__":
 
     # forward
     print("test forward")
-    feat_tensor = torch.randn((batch_size, in_channels)).float()
+    feat_tensor = torch.randn((batch_size, 1, in_channels)).float()
     tar_candi_tensor = torch.randn((batch_size, N, 2)).float()
     tar_pred, offset_pred = layer(feat_tensor, tar_candi_tensor)
-    # print("shape of pred prob: ", pred.size())
-    # print("shape of dx and dy: ", dx.size())
-    # print("shape of indices: ", indices.size())
+    print("shape of pred prob: ", tar_pred.size())
+    print("shape of dx and dy: ", offset_pred.size())
 
     # loss
     print("test loss")
@@ -199,10 +174,10 @@ if __name__ == "__main__":
     offset_gt = torch.randn((batch_size, 2))
     loss = layer.loss(feat_tensor, tar_candi_tensor, candid_gt, offset_gt)
 
-    # # inference
-    # print("test inference")
-    # pred_se, dx_se, dy_se = layer.inference(feat_tensor, tar_candi_tensor)
-    # print("shape of pred_se: ", pred_se.size())
-    # print("shape of dx, dy: ", dx_se.size())
+    # inference
+    print("test inference")
+    tar_candidate, offset = layer.inference(feat_tensor, tar_candi_tensor)
+    print("shape of tar_candidate: ", tar_candidate.size())
+    print("shape of offset: ", offset.size())
 
 
