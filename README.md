@@ -8,13 +8,16 @@ A Python and Pytorch implementation of
 and
 [VectorNet: Encoding HD Maps and Agent Dynamics from Vectorized Representation](https://arxiv.org/abs/2005.04259).
 
+> **ATTENTION**: Currently, the training consumes a large memory (128G+) since an in memory data loader is implemented. We'll provide a new dataloader that loading only training batches from disk for each step in the coming future.
+
+
 ### Achieved Best Performance
 The best performance achieved by our implementation and reported in the papers. 
 
 | Algorithm | minADE(K=1)  | minFDE(K=1) | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
 | :-------: | :-----------:| :---------: | :-------:| :----------:| :---------: | :-------:|
 | VectorNet (Original) | 1.66        | 3.67       | -        | -           | -           | -        |
-| VectorNet (**Ours**) | 1.855       | 3.845      | 0.649    | -           | -           | -        |
+| VectorNet (**Ours**) | 1.707       | 3.880      | 0.648    | -           | -           | -        |
 |  TNT(Original)   | -            | -           | -        | 0.728       | 1.292       | 0.093    |
 |  TNT(**Ours**)   | -            | -           | -        | 1.138       | 2.123       | 0.286    |
 
@@ -99,8 +102,7 @@ If you store the raw data at a different location, you can change relative path 
 - [ ] Create a base class for models;
 
 3. Training-Related:
-- [x] Implement the Gaussian negative log-likelihood loss function (Currently, mse loss);
-- [ ] Enable multi-gpu training;
+- [x] Enable multi-gpu training; (Using Nvidia APEX library, will be merged to main branch later...)
 - [ ] Enable loading data from the hard disk. 
 
 4. Inference-Related:
@@ -111,7 +113,7 @@ If you store the raw data at a different location, you can change relative path 
 
 if you've found this code to be useful, please consider citing our paper!
 ```
-xxx
+Liu, J., Mao, X., Fang, Y., Zhu, D., & Meng, M. Q. H. (2021). A Survey on Deep-Learning Approaches for Vehicle Trajectory Prediction in Autonomous Driving. arXiv preprint arXiv:2110.10436.
 
 ```
 
