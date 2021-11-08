@@ -8,7 +8,7 @@ A Python and Pytorch implementation of
 and
 [VectorNet: Encoding HD Maps and Agent Dynamics from Vectorized Representation](https://arxiv.org/abs/2005.04259).
 
-> **ATTENTION**: Currently, the training consumes a large memory (128G+) since an in memory data loader is implemented. We'll provide a new dataloader that loading only training batches from disk for each step in the coming future.
+> **ATTENTION**: Currently, the training consumes a large memory (128G+) since an in-memory data loader is implemented. We'll provide a new dataloader that loading only training batches from disk for each step in the coming future.
 
 
 ### Achieved Best Performance
