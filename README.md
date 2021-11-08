@@ -93,7 +93,7 @@ If you store the raw data at a different location, you can change relative path 
 
 ### TODO
 1. Data-Related:
--[ ] Preprocessing of test set;
+- [ ] Preprocessing of test set;
 
 2. Model-Related:
 - [ ] Create a base class for models;
