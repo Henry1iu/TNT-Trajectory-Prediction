@@ -65,18 +65,18 @@ class ArgoversePreprocessor(Dataset):
         city = dataframe["CITY_NAME"].values[0]
 
         agent_df = dataframe[dataframe.OBJECT_TYPE == "AGENT"].sort_values(by="TIMESTAMP")
-        trajs = np.concatenate((agent_df.X.to_numpy().reshape(-1, 1), agent_df.Y.to_numpy().reshape(-1, 1)), 1)
+        traj = np.concatenate((agent_df.X.to_numpy().reshape(-1, 1), agent_df.Y.to_numpy().reshape(-1, 1)), 1)
 
-        orig = trajs[self.obs_horizon-1].copy().astype(np.float32)
+        orig = traj[self.obs_horizon-1].copy().astype(np.float32)
 
         # get the road centrelines
         lanes = self.am.find_local_lane_centerlines(orig[0], orig[1], city_name=city)
 
         # get the rotation
-        lane_dir_vector, conf, nearest = self.am.get_lane_direction_traj(traj=trajs[:self.obs_horizon], city_name=city)
+        lane_dir_vector, conf, nearest = self.am.get_lane_direction_traj(traj=traj[:self.obs_horizon], city_name=city)
 
         if conf <= 0.1:
-            lane_dir_vector = (orig - trajs[self.obs_horizon-4]) / 2.0
+            lane_dir_vector = (orig - traj[self.obs_horizon-4]) / 2.0
         theta = - np.arctan2(lane_dir_vector[1], lane_dir_vector[0])
         # print("pre: {};".format(pre))
         # print("theta: {};".format(theta))
@@ -90,8 +90,8 @@ class ArgoversePreprocessor(Dataset):
             [0, 1]
         ])
 
-        agt_rot = np.matmul(rot, (trajs - orig.reshape(-1, 2)).T).T
-        agt_ori = np.matmul(rot_, (trajs - orig.reshape(-1, 2)).T).T
+        agt_rot = np.matmul(rot, (traj - orig.reshape(-1, 2)).T).T
+        agt_ori = np.matmul(rot_, (traj - orig.reshape(-1, 2)).T).T
 
         if self.viz:
             # plot original seq

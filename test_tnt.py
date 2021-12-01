@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0804",
                         help="root dir for datasets")
-    parser.add_argument("-b", "--batch_size", type=int, default=128,
+    parser.add_argument("-b", "--batch_size", type=int, default=64,
                         help="number of batch_size")
     parser.add_argument("-w", "--num_workers", type=int, default=16,
                         help="dataloader worker size")
