@@ -15,7 +15,8 @@ from torch_geometric.data import DataLoader, DataListLoader, Batch, Data
 from core.model.layers.global_graph import GlobalGraph, SelfAttentionFCLayer
 from core.model.layers.subgraph import SubGraph
 from core.dataloader.dataset import GraphDataset, GraphData
-from core.model.backbone.vectornet import VectorNetBackbone
+# from core.model.backbone.vectornet import VectorNetBackbone
+from core.model.backbone.vectornet_v2 import VectorNetBackbone
 from core.loss import VectorLoss
 from core.dataloader.argoverse_loader import Argoverse
 
