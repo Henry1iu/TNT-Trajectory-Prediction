@@ -1,3 +1,4 @@
+import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -210,6 +211,10 @@ class TNTTrainer(Trainer):
         # horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
         horizon = self.model.horizon
 
+        # debug
+        out_dict = {}
+        out_cnt = 0
+
         with torch.no_grad():
             for data in tqdm(self.test_loader):
                 batch_size = data.num_graphs
@@ -222,6 +227,11 @@ class TNTTrainer(Trainer):
                 else:
                     out = self.model(data.to(self.device))
                 dim_out = len(out.shape)
+
+                # debug
+                out_dict[out_cnt] = out.cpu().numpy()
+                out_cnt += 1
+
                 pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
 
                 # record the prediction and ground truth
@@ -230,6 +240,7 @@ class TNTTrainer(Trainer):
                     gt_trajectories[seq_id] = gt[batch_id]
                     seq_id += 1
 
+        # np.save("/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Prediction-checkout/TNT-Trajectory-Prediction/TNT_results/out64.npy", out_dict)
         # compute the metric
         metric_results = get_displacement_errors_and_miss_rate(
             forecasted_trajectories,
