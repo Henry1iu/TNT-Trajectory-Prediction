@@ -92,6 +92,9 @@ class VectorNet(nn.Module):
 
         return self.criterion(pred, y, aux_out, aux_gt)
 
+    def inference(self, data):
+        return self.forward(data)
+
 # class VectorNet(nn.Module):
 #     """
 #     hierarchical GNN with trajectory prediction MLP

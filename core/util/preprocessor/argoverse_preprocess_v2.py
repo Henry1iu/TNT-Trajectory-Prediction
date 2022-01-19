@@ -35,6 +35,7 @@ class ArgoversePreprocessor(Preprocessor):
                  obs_horizon=20,
                  obs_range=100,
                  pred_horizon=30,
+                 normalized=True,
                  save_dir=None):
         super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range, pred_horizon)
 
@@ -42,6 +43,7 @@ class ArgoversePreprocessor(Preprocessor):
         self.COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#d3e8ef", "AV": "#007672"}
 
         self.split = split
+        self.normalized = normalized
 
         self.am = ArgoverseMap()
         self.loader = ArgoverseForecastingLoader(pjoin(self.root_dir, self.split+"_obs" if split == "test" else split))
@@ -116,13 +118,21 @@ class ArgoversePreprocessor(Preprocessor):
     def get_obj_feats(self, data):
         # get the origin and compute the oritentation of the target agent
         orig = data['trajs'][0][self.obs_horizon-1].copy().astype(np.float32)
-        pre, conf, _ = self.am.get_lane_direction_traj(traj=data['trajs'][0][:self.obs_horizon], city_name=data['city'])
-        if conf <= 0.1:
-            pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
-        theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
-        rot = np.asarray([
-            [np.cos(theta), -np.sin(theta)],
-            [np.sin(theta), np.cos(theta)]], np.float32)
+
+        # comput the rotation matrix
+        if self.normalized:
+            pre, conf, _ = self.am.get_lane_direction_traj(traj=data['trajs'][0][:self.obs_horizon], city_name=data['city'])
+            if conf <= 0.1:
+                pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
+            theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
+            rot = np.asarray([
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)]], np.float32)
+        else:
+            # if not normalized, do not rotate.
+            rot = np.asarray([
+                [1.0, 0.0],
+                [0.0, 1.0]], np.float32)
 
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
@@ -133,10 +143,14 @@ class ArgoversePreprocessor(Preprocessor):
         agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
         for i, _ in enumerate(ctr_line_candts):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
-        splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
 
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
-        tar_candts_gt, tar_offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
+        if self.split == "test":
+            tar_candts_gt, tar_offse_gt = None, None
+            splines, ref_idx = None, None
+        else:
+            splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
+            tar_candts_gt, tar_offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
 
         # self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
         # if not np.all(offse_gt < self.LANE_WIDTH[data['city']]):
@@ -399,14 +413,15 @@ if __name__ == "__main__":
     # inter_dir = os.path.join(root, "intermediate")
     interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0923"
 
-    for split in ["train", "val"]:
+    # for split in ["train", "val", "test"]:
+    for split in ["test"]:
         # construct the preprocessor and dataloader
-        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir, normalized=False)
         loader = DataLoader(argoverse_processor,
                             batch_size=16,
                             num_workers=16,
                             shuffle=False,
-                            pin_memory=False,
+                            pin_memory=True,
                             drop_last=False)
 
         for i, data in enumerate(tqdm(loader)):

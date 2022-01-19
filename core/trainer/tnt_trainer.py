@@ -82,7 +82,7 @@ class TNTTrainer(Trainer):
         # model_name = VectorNet
         model_name = TNT
         self.model = model_name(
-            self.trainset.num_features,
+            self.trainset.num_features if hasattr(self.trainset, 'num_features') else self.testset.num_features,
             horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
