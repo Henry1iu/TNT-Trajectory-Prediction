@@ -130,6 +130,7 @@ class ArgoversePreprocessor(Preprocessor):
                 [np.sin(theta), np.cos(theta)]], np.float32)
         else:
             # if not normalized, do not rotate.
+            theta = None
             rot = np.asarray([
                 [1.0, 0.0],
                 [0.0, 1.0]], np.float32)
@@ -411,7 +412,7 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0923"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0804_small"
 
     # for split in ["train", "val", "test"]:
     for split in ["test"]:

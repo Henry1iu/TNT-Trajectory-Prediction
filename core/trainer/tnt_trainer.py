@@ -200,7 +200,7 @@ class TNTTrainer(Trainer):
         return avg_loss
 
     # todo: the inference of the model
-    def test(self, miss_threshold=2.0):
+    def test(self, miss_threshold=2.0, compute_metric=True, convert_coordinate=False, plot=False, out=False):
         self.model.eval()
 
         forecasted_trajectories, gt_trajectories = {}, {}
@@ -219,6 +219,11 @@ class TNTTrainer(Trainer):
             for data in tqdm(self.test_loader):
                 batch_size = data.num_graphs
                 gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1).numpy()
+                origs = data.orig.numpy()
+                rots = data.rot.numpy()
+
+                if gt is None:
+                    compute_metric = False
 
                 # inference and transform dimension
                 if self.multi_gpu:
@@ -236,25 +241,32 @@ class TNTTrainer(Trainer):
 
                 # record the prediction and ground truth
                 for batch_id in range(batch_size):
-                    forecasted_trajectories[seq_id] = [pred_y_k for pred_y_k in pred_y[batch_id]]
+                    forecasted_trajectories[seq_id] = [self.convert_coord(pred_y_k, origs[batch_id], rots[batch_id])
+                                                       if convert_coordinate else pred_y_k
+                                                       for pred_y_k in pred_y[batch_id]]
                     gt_trajectories[seq_id] = gt[batch_id]
                     seq_id += 1
 
-        # np.save("/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Prediction-checkout/TNT-Trajectory-Prediction/TNT_results/out64.npy", out_dict)
         # compute the metric
-        metric_results = get_displacement_errors_and_miss_rate(
-            forecasted_trajectories,
-            gt_trajectories,
-            k,
-            horizon,
-            miss_threshold
-        )
-        print("[TNTTrainer]: The test result: {};".format(metric_results))
+        if compute_metric:
+            metric_results = get_displacement_errors_and_miss_rate(
+                forecasted_trajectories,
+                gt_trajectories,
+                k,
+                horizon,
+                miss_threshold
+            )
+            print("[TNTTrainer]: The test result: {};".format(metric_results))
 
         # plot the result
-        fig, ax = plt.subplots()
-        for key in forecasted_trajectories.keys():
-            ax.set_xlim(-15, 15)
-            show_pred_and_gt(ax, gt_trajectories[key], forecasted_trajectories[key])
-            plt.pause(3)
-            ax.clear()
+        if plot:
+            fig, ax = plt.subplots()
+            for key in forecasted_trajectories.keys():
+                ax.set_xlim(-15, 15)
+                show_pred_and_gt(ax, gt_trajectories[key], forecasted_trajectories[key])
+                plt.pause(3)
+                ax.clear()
+
+    # todo: function to convert the coordinates of trajectories from relative to world
+    def convert_coord(self, traj, orig, rot):
+        pass

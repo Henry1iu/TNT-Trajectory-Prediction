@@ -47,7 +47,7 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0804",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0804_small",
                         help="root dir for datasets")
     parser.add_argument("-b", "--batch_size", type=int, default=128,
                         help="number of batch_size")
@@ -63,7 +63,7 @@ if __name__ == "__main__":
                         # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/11-28-03-27/best_TNT.pth",
+                        default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/01-22-18-55/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()
