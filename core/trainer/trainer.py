@@ -233,7 +233,8 @@ class Trainer(object):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    out = self.model.module.inference(data.to(self.device))
+                    # out = self.model.module.inference(data.to(self.device))
+                    out = self.model.inference(data.to(self.device))
                     # out = self.model(data.to(self.device))
                 else:
                     out = self.model.inference(data.to(self.device))

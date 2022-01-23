@@ -185,8 +185,8 @@ class TNT(nn.Module):
 
         # predict the prob. of target candidates and selected the most likely M candidate
         target_prob, offset_pred = self.target_pred_layer(target_feat, target_candidate)
-        _, indices = target_prob.topk(self.M, dim=1)
-        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.M)]).T
+        _, indices = target_prob.topk(self.m, dim=1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
         target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset_pred[batch_idx, indices]
 
         # # DEBUG
