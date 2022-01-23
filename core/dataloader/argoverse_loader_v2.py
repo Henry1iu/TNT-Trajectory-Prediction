@@ -119,6 +119,9 @@ class ArgoverseInMem(InMemoryDataset):
                 candidate_gt=torch.from_numpy(raw_data['gt_candts'].values[0]).bool(),
                 offset_gt=torch.from_numpy(raw_data['gt_tar_offset'].values[0]).float(),
                 target_gt=torch.from_numpy(raw_data['gt_preds'].values[0][0][-1, :]).float(),
+
+                orig=torch.from_numpy(raw_data['orig'].values[0]).float(),
+                rot=torch.from_numpy(raw_data['rot'].values[0]).float()
             )
             data_list.append(graph_input)
 
@@ -212,8 +215,8 @@ class ArgoverseInMem(InMemoryDataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
     for folder in ["train", "val"]:
