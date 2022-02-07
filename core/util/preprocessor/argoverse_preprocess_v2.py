@@ -3,6 +3,7 @@
 # Date: 2021.07.16
 
 import os
+import argparse
 from os.path import join as pjoin
 import copy
 import numpy as np
@@ -408,28 +409,30 @@ def ref_copy(data):
 
 
 if __name__ == "__main__":
-    # config path
-    root = "/media/Data/autonomous_driving/Argoverse"
-    raw_dir = os.path.join(root, "raw_data")
-    # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_data"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--root", type=str, default="../dataset")
+    parser.add_argument("-d", "--dest", type=str, default="../dataset")
+    parser.add_argument("-s", "--small", action='store_true', default=False)
+    args = parser.parse_args()
 
-    for split in ["val", "train", "test"]:
+    raw_dir = os.path.join(args.root, "raw_data")
+    interm_dir = os.path.join(args.dest, "interm_data" if not args.small else "interm_data_small")
+
+    for split in ["train", "val", "test"]:
         # construct the preprocessor and dataloader
-        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir,
-                                                    split=split,
-                                                    save_dir=interm_dir,
-                                                    normalized=False if split == "test" else True)
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,
                             batch_size=16,
                             num_workers=16,
                             shuffle=False,
-                            pin_memory=True,
+                            pin_memory=False,
                             drop_last=False)
 
         for i, data in enumerate(tqdm(loader)):
-            pass
-            # if split == "train" and i >= 500:
-            #     break
-            # elif split == "val" and i >= 100:
-            #     break
+            if args.small:
+                if split == "train" and i >= 200:
+                    break
+                elif split == "val" and i >= 50:
+                    break
+                elif split == "test" and i >= 50:
+                    break

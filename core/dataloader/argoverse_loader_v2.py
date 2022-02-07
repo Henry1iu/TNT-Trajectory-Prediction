@@ -216,7 +216,7 @@ class ArgoverseInMem(InMemoryDataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_small"
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 

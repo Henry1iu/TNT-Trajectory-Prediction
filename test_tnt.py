@@ -55,7 +55,7 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_tnt_n_s_0804_small",
+    parser.add_argument("-d", "--data_root", required=False, type=str, default="dataset/interm_data_small",
                         help="root dir for datasets")
     parser.add_argument("-b", "--batch_size", type=int, default=128,
                         help="number of batch_size")

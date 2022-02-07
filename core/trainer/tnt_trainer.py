@@ -207,8 +207,19 @@ class TNTTrainer(Trainer):
 
         return avg_loss
 
-    # todo: the inference of the model
-    def test(self, miss_threshold=2.0, compute_metric=False, convert_coordinate=True, plot=False, save_pred=True):
+    def test(self,
+             miss_threshold=2.0,
+             compute_metric=False,
+             convert_coordinate=True,
+             plot=False,
+             save_pred=True):
+        """
+        test the testset,
+        :param miss_threshold: float, the threshold for the miss rate, default 2.0m
+        :param compute_metric: bool, whether compute the metric
+        :param convert_coordinate: bool, True: under original coordinate, False: under the relative coordinate
+        :param save_pred: store the prediction or not, store in the Argoverse benchmark format
+        """
         self.model.eval()
 
         forecasted_trajectories, gt_trajectories = {}, {}
