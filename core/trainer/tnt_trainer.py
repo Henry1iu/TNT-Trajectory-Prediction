@@ -8,6 +8,7 @@ from torch.optim import Adam, AdamW
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import DataParallel
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
+from argoverse.evaluation.competition_util import generate_forecasting_h5
 
 from core.trainer.trainer import Trainer
 from core.model.TNT import TNT
@@ -83,7 +84,7 @@ class TNTTrainer(Trainer):
         # model_name = VectorNet
         model_name = TNT
         self.model = model_name(
-            self.trainset.num_features,
+            self.trainset.num_features if hasattr(self.trainset, 'num_features') else self.testset.num_features,
             horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
@@ -163,9 +164,14 @@ class TNTTrainer(Trainer):
 
                 # writing loss
                 self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Loss", loss_dict["target_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Traj_Loss", loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Score_Loss", loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Cls_Loss",
+                               loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Target_Offset_Loss",
+                               loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Traj_Loss",
+                               loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                self.write_log("Score_Loss",
+                               loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
@@ -177,12 +183,14 @@ class TNTTrainer(Trainer):
 
                     # writing loss
                     self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Target_Loss(Eval)",
-                                   loss_dict["target_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Traj_Loss(Eval)",
-                                   loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    self.write_log("Score_Loss(Eval)",
-                                   loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Target_Cls_Loss(Eval)",
+                    #                loss_dict["tar_cls_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Target_Offset_Loss(Eval)",
+                    #                loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Traj_Loss(Eval)",
+                    #                loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    # self.write_log("Score_Loss(Eval)",
+                    #                loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
             avg_loss += loss.detach().item()
@@ -200,11 +208,10 @@ class TNTTrainer(Trainer):
         return avg_loss
 
     # todo: the inference of the model
-    def test(self, miss_threshold=2.0, compute_metric=True, convert_coordinate=False, plot=False, out=False):
+    def test(self, miss_threshold=2.0, compute_metric=False, convert_coordinate=True, plot=False, save_pred=True):
         self.model.eval()
 
         forecasted_trajectories, gt_trajectories = {}, {}
-        seq_id = 0
 
         # k = self.model.k if not self.multi_gpu else self.model.module.k
         k = self.model.k
@@ -221,6 +228,7 @@ class TNTTrainer(Trainer):
                 gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1).numpy()
                 origs = data.orig.numpy()
                 rots = data.rot.numpy()
+                seq_ids = data.seq_id.numpy()
 
                 if gt is None:
                     compute_metric = False
@@ -228,9 +236,9 @@ class TNTTrainer(Trainer):
                 # inference and transform dimension
                 if self.multi_gpu:
                     # out = self.model.module(data.to(self.device))
-                    out = self.model(data.to(self.device))
+                    out = self.model.inference(data.to(self.device))
                 else:
-                    out = self.model(data.to(self.device))
+                    out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)
 
                 # debug
@@ -241,11 +249,12 @@ class TNTTrainer(Trainer):
 
                 # record the prediction and ground truth
                 for batch_id in range(batch_size):
+                    seq_id = seq_ids[batch_id]
                     forecasted_trajectories[seq_id] = [self.convert_coord(pred_y_k, origs[batch_id], rots[batch_id])
                                                        if convert_coordinate else pred_y_k
                                                        for pred_y_k in pred_y[batch_id]]
-                    gt_trajectories[seq_id] = gt[batch_id]
-                    seq_id += 1
+                    gt_trajectories[seq_id] = self.convert_coord(gt[batch_id], origs[batch_id], rots[batch_id]) \
+                        if convert_coordinate else gt[batch_id]
 
         # compute the metric
         if compute_metric:
@@ -267,6 +276,14 @@ class TNTTrainer(Trainer):
                 plt.pause(3)
                 ax.clear()
 
-    # todo: function to convert the coordinates of trajectories from relative to world
+        # todo: save the output in argoverse format
+        if save_pred:
+            for key in forecasted_trajectories.keys():
+                forecasted_trajectories[key] = np.asarray(forecasted_trajectories[key])
+            generate_forecasting_h5(forecasted_trajectories, self.save_folder)
+
+    # function to convert the coordinates of trajectories from relative to world
     def convert_coord(self, traj, orig, rot):
-        pass
+        traj_converted = np.matmul(np.linalg.inv(rot), traj.T).T + orig.reshape(-1, 2)
+        return traj_converted
+

@@ -6,19 +6,24 @@
 
 import os
 import random
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import DataLoader, DataListLoader, Batch, Data
 
+# from core.model.layers.global_graph import GlobalGraph, SelfAttentionFCLayer
 from core.model.layers.global_graph import GlobalGraph, SelfAttentionFCLayer
 from core.model.layers.subgraph import SubGraph
 from core.dataloader.dataset import GraphDataset, GraphData
 # from core.model.backbone.vectornet import VectorNetBackbone
+from core.model.layers.basic_module import MLP
 from core.model.backbone.vectornet_v2 import VectorNetBackbone
 from core.loss import VectorLoss
 from core.dataloader.argoverse_loader import Argoverse
+
+from core.dataloader.argoverse_loader_v2 import GraphData, ArgoverseInMem
 
 
 class VectorNet(nn.Module):
@@ -61,12 +66,9 @@ class VectorNet(nn.Module):
 
         # pred mlp
         self.traj_pred_mlp = nn.Sequential(
-            nn.Linear(global_graph_width, traj_pred_mlp_width),
-            nn.LayerNorm(traj_pred_mlp_width),
-            nn.ReLU(),
+            MLP(global_graph_width, traj_pred_mlp_width, traj_pred_mlp_width),
             nn.Linear(traj_pred_mlp_width, self.horizon * self.out_channels)
         )
-        self._init_weight()
 
     def forward(self, data):
         """
@@ -88,19 +90,10 @@ class VectorNet(nn.Module):
 
         y = data.y.view(-1, self.out_channels * self.horizon)
 
-        return self.criterion(pred, y)
+        return self.criterion(pred, y, aux_out, aux_gt)
 
-    def _init_weight(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight)
-                # module.weight.data.kaiming_uniform_(module)
-            elif isinstance(module, nn.BatchNorm2d):
-                module.weight.data.fill_(1)
-                module.bias.data.zero_()
-            elif isinstance(module, nn.LayerNorm):
-                module.weight.data.fill_(1)
-                module.bias.data.zero_()
+    def inference(self, data):
+        return self.forward(data)
 
 # class VectorNet(nn.Module):
 #     """
@@ -329,12 +322,9 @@ class OriginalVectorNet(nn.Module):
 
 # %%
 if __name__ == "__main__":
-    epochs = 100
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     batch_size = 2
-    decay_lr_factor = 0.9
-    decay_lr_every = 10
-    lr = 0.005
+
     in_channels, pred_len = 10, 30
     show_every = 10
     os.chdir('..')
@@ -342,16 +332,12 @@ if __name__ == "__main__":
     model = VectorNet(in_channels, pred_len, with_aux=True).to(device)
     # model = OriginalVectorNet(in_channels, pred_len, with_aux=True).to(device)
 
-    # DATA_DIR = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet"
-    # TRAIN_DIR = os.path.join(DATA_DIR, 'data/interm_data', 'train_intermediate')
-    # dataset = GraphDataset(TRAIN_DIR)
+    DATA_DIR = "../../dataset/interm_data/"
+    TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
+    dataset = ArgoverseInMem(TRAIN_DIR)
+    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=1, pin_memory=True)
 
-    DATA_DIR = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset/interm_tnt_with_filter/"
-    # TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
-    VAL_DIR = os.path.join(DATA_DIR, 'val_intermediate')
-    dataset = Argoverse(VAL_DIR)
-    data_iter = DataLoader(dataset, batch_size=batch_size)
-
+    # train mode
     model.train()
     for i, data in enumerate(data_iter):
         # out, aux_out, mask_feat_gt = model(data)
@@ -361,6 +347,7 @@ if __name__ == "__main__":
         if i == 2:
             break
 
+    # eval mode
     model.eval()
     for i, data in enumerate(data_iter):
         out = model(data.to(device))

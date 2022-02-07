@@ -7,6 +7,8 @@ from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, max_pool, avg_pool
 from torch_geometric.utils import add_self_loops, remove_self_loops
 
+from core.model.layers.basic_module import MLP
+
 
 class SubGraph(nn.Module):
     """
@@ -16,13 +18,15 @@ class SubGraph(nn.Module):
     def __init__(self, in_channels, num_subgraph_layres=3, hidden_unit=64):
         super(SubGraph, self).__init__()
         self.num_subgraph_layres = num_subgraph_layres
+        self.out_channels = hidden_unit * 2
+
         self.layer_seq = nn.Sequential()
         for i in range(num_subgraph_layres):
             self.layer_seq.add_module(
                 f'glp_{i}', GraphLayerProp(in_channels, hidden_unit))
-            in_channels *= 2
+            in_channels = hidden_unit * 2
 
-        # self.layer_seq = nn.DataParallel(self.layer_seq,  device_ids=[1, 0])
+        # self.linear = nn.Linear(hidden_unit * 2, hidden_unit)
 
     def forward(self, sub_data):
         """
@@ -49,9 +53,8 @@ class SubGraph(nn.Module):
         # ###################################### DEBUG ###################################### #
 
         assert out_data.x.shape[0] % int(sub_data.time_step_len[0]) == 0
-        # except:
-            # from pdb import set_trace; set_trace()
-        out_data.x = out_data.x / out_data.x.norm(dim=0)
+        # out_data.x = torch.div(out_data.x.T, torch.norm(out_data.x, dim=-1)).T
+        out_data.x = out_data.x / (out_data.x.norm(dim=0) + 1e-12)      # L2 normalization
         return out_data
 
         # node_feature, _ = torch.max(x, dim=0)
@@ -71,20 +74,25 @@ class GraphLayerProp(MessagePassing):
         super(GraphLayerProp, self).__init__(
             aggr='max')  # MaxPooling aggragation
         self.verbose = verbose
-        self.mlp = nn.Sequential(
-            nn.Linear(in_channels, hidden_unit),
-            nn.LayerNorm(hidden_unit),
-            nn.ReLU(),
-            nn.Linear(hidden_unit, in_channels)
-        )
+        self.residual = True if in_channels == hidden_unit else False
+
+        # self.mlp = nn.Sequential(
+        #     nn.Linear(in_channels, hidden_unit),
+        #     nn.LayerNorm(hidden_unit),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_unit, hidden_unit)
+        # )
+        self.mlp = MLP(in_channels, hidden_unit, hidden_unit)
 
     def forward(self, x, edge_index):
         edge_index, _ = remove_self_loops(edge_index)
         edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
-        residual = x
+
         if self.verbose:
             print(f'x before mlp: {x}')
-        x = self.mlp(x) + residual
+
+        x = self.mlp(x)
+
         if self.verbose:
             print(f"x after mlp: {x}")
         return self.propagate(edge_index, size=(x.size(0), x.size(0)), x=x)

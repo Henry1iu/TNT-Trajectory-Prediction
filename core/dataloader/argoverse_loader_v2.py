@@ -120,8 +120,9 @@ class ArgoverseInMem(InMemoryDataset):
                 offset_gt=torch.from_numpy(raw_data['gt_tar_offset'].values[0]).float(),
                 target_gt=torch.from_numpy(raw_data['gt_preds'].values[0][0][-1, :]).float(),
 
-                orig=torch.from_numpy(raw_data['orig'].values[0]).float(),
-                rot=torch.from_numpy(raw_data['rot'].values[0]).float()
+                orig=torch.from_numpy(raw_data['orig'].values[0]).float().unsqueeze(0),
+                rot=torch.from_numpy(raw_data['rot'].values[0]).float().unsqueeze(0),
+                seq_id=torch.tensor([int(raw_data['seq_id'])]).int()
             )
             data_list.append(graph_input)
 
@@ -192,7 +193,7 @@ class ArgoverseInMem(InMemoryDataset):
         feats = np.vstack([feats, np.hstack([ctrs, vec, steps, traffic_ctrl, is_turns, is_intersect, lane_idcs])])
 
         # get the cluster and construct subgraph edge_index
-        cluster = copy(feats[:, -1].astype(np.int))
+        cluster = copy(feats[:, -1].astype(np.int64))
         for cluster_idc in np.unique(cluster):
             [indices] = np.where(cluster == cluster_idc)
             identifier = np.vstack([identifier, np.min(feats[indices, :2], axis=0)])
@@ -219,8 +220,8 @@ if __name__ == "__main__":
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
 
-    for folder in ["train", "val"]:
-    # for folder in ["val"]:
+    for folder in ["train", "val", "test"]:
+    # for folder in ["test"]:
         dataset_input_path = os.path.join(INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         # dataset = Argoverse(dataset_input_path)

@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.model.layers.basic_module import MLP
+
 
 class MotionEstimation(nn.Module):
     def __init__(self,
@@ -20,18 +22,20 @@ class MotionEstimation(nn.Module):
         self.horizon = horizon
         self.hidden_dim = hidden_dim
 
+        # self.traj_pred = nn.Sequential(
+        #     nn.Linear(in_channels + 2, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     # nn.LeakyReLU(inplace=True),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, horizon * 2)
+        # )
         self.traj_pred = nn.Sequential(
-            nn.Linear(in_channels + 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
-            # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            MLP(in_channels + 2, hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, horizon * 2)
         )
-
-        # self.traj_pred = nn.DataParallel(self.traj_pred, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, loc_in: torch.Tensor):
         """
@@ -40,21 +44,20 @@ class MotionEstimation(nn.Module):
         :param loc_in: end location, torch.Tensor, [batch_size, M, 2] or [batch_size, 1, 2]
         :return: [batch_size, M, horizon * 2] or [batch_size, 1, horizon * 2]
         """
-        assert feat_in.dim() == 2, "[MotionEstimation]: Error dimension in encoded feature input"
-        assert feat_in.size()[1] == self.in_channels, "[MotionEstimation]: Error feature, mismatch in the feature channels!"
+        assert feat_in.dim() == 3, "[MotionEstimation]: Error dimension in encoded feature input"
+        assert feat_in.size()[-1] == self.in_channels, "[MotionEstimation]: Error feature, mismatch in the feature channels!"
 
-        feat_in = feat_in.unsqueeze(1)
         batch_size, M, _ = loc_in.size()
         if M > 1:
             # target candidates
             input = torch.cat([feat_in.repeat(1, M, 1), loc_in], dim=2)
         else:
             # targt ground truth
-            input = torch.cat([feat_in, loc_in], dim=2)
+            input = torch.cat([feat_in, loc_in], dim=-1)
 
         return self.traj_pred(input)
 
-    def loss(self, feat_in: torch.Tensor, loc_gt: torch.Tensor, traj_gt: torch.Tensor, reduction="mean"):
+    def loss(self, feat_in: torch.Tensor, loc_gt: torch.Tensor, traj_gt: torch.Tensor):
         """
         compute loss according to the ground truth target location input
         :param feat_in: feature input of the target agent, torch.Tensor, [batch_size, in_channels]
@@ -63,11 +66,13 @@ class MotionEstimation(nn.Module):
         :param reduction: reduction of the loss, str
         :return:
         """
-        assert feat_in.dim() == 2, "[MotionEstimation]: Error in feature input dimension."
+        assert feat_in.dim() == 3, "[MotionEstimation]: Error in feature input dimension."
         assert traj_gt.dim() == 2, "[MotionEstimation]: Error in trajectory gt dimension."
-        traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
+        batch_size, _, _ = feat_in.size()
 
-        loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction=reduction)
+        traj_pred = self.forward(feat_in, loc_gt.unsqueeze(1)).squeeze(1)
+        loss = F.smooth_l1_loss(traj_pred, traj_gt, reduction='sum')
+        # loss /= batch_size          # average over batches
 
         # ====================================== DEBUG ====================================== #
         # print("[DEBUG]: traj_pred: \n{};".format(traj_pred.detach().cpu().numpy()))

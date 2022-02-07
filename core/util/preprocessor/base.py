@@ -36,10 +36,11 @@ class Preprocessor(Dataset):
         """ the total number of sequence in the dataset """
         raise NotImplementedError
 
-    def process(self, dataframe: pd.DataFrame, map_feat=True):
+    def process(self, dataframe: pd.DataFrame, seq_id: str, map_feat=True):
         """
         select filter the data frame, output filtered data frame
         :param dataframe: DataFrame, the data frame
+        :param seq_id: str, the sequence id
         :param map_feat: bool, output map feature or not
         :return: DataFrame[(same as orignal)]
         """
@@ -78,6 +79,7 @@ class Preprocessor(Dataset):
             dir_ = os.path.join(os.path.split(self.root_dir)[0], "intermediate", self.split + "_intermediate", "raw")
         else:
             dir_ = os.path.join(dir_, self.split + "_intermediate", "raw")
+
         if not os.path.exists(dir_):
             os.makedirs(dir_)
 
@@ -85,7 +87,7 @@ class Preprocessor(Dataset):
         dataframe.to_pickle(os.path.join(dir_, fname))
         # print("[Preprocessor]: Saving data to {} with name: {}...".format(dir_, fname))
 
-    def process_and_save(self, dataframe: pd.DataFrame, file_name, dir_=None, map_feat=True):
+    def process_and_save(self, dataframe: pd.DataFrame, seq_id, dir_=None, map_feat=True):
         """
         save the feature in the data sequence in a single csv files
         :param dataframe: DataFrame, the data frame
@@ -94,8 +96,8 @@ class Preprocessor(Dataset):
         :param dir_: str, the directory to store the csv file
         :return:
         """
-        df_processed = self.process(dataframe, map_feat)
-        self.save(df_processed, file_name, dir_)
+        df_processed = self.process(dataframe, seq_id, map_feat)
+        self.save(df_processed, seq_id, dir_)
 
         return []
 

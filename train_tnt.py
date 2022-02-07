@@ -105,7 +105,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--lr", type=float, default=3e-3, help="learning rate of adam")
     parser.add_argument("-we", "--warmup_epoch", type=int, default=20,
-                        help="The epoch to start the learning rate decay")
+                        help="the number of warmup epoch with initial learning rate, after the learning rate decays")
     parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
                         help="learning rate decay frequency for lr scheduler")
     parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")

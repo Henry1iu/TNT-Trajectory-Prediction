@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.model.layers.basic_module import MLP
+
 
 def distance_metric(traj_candidate: torch.Tensor, traj_gt: torch.Tensor):
     """
@@ -53,18 +55,19 @@ class TrajScoreSelection(nn.Module):
 
         self.device = device
 
+        # self.score_mlp = nn.Sequential(
+        #     nn.Linear(feat_channels + horizon * 2, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.LayerNorm(hidden_dim),
+        #     nn.ReLU(inplace=True),
+        #     nn.Linear(hidden_dim, 1)
+        # )
         self.score_mlp = nn.Sequential(
-            nn.Linear(feat_channels + horizon * 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
-            # nn.LeakyReLU(inplace=True),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(inplace=True),
+            MLP(feat_channels + horizon * 2, hidden_dim, hidden_dim),
             nn.Linear(hidden_dim, 1)
         )
-
-        # self.score_mlp = nn.DataParallel(self.score_mlp, device_ids=[1, 0])
 
     def forward(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
@@ -73,14 +76,15 @@ class TrajScoreSelection(nn.Module):
         :param traj_in: candidate trajectories, torch.Tensor, [batch_size, M, horizon * 2]
         :return: [batch_size, M]
         """
-        assert feat_in.dim() == 2, "[TrajScoreSelection]: Error in input feature dimension."
+        assert feat_in.dim() == 3, "[TrajScoreSelection]: Error in input feature dimension."
         assert traj_in.dim() == 3, "[TrajScoreSelection]: Error in candidate trajectories dimension"
+
         batch_size, M, _ = traj_in.size()
-        input_tenor = torch.cat([feat_in.unsqueeze(1).repeat(1, M, 1), traj_in], dim=2)
+        input_tenor = torch.cat([feat_in.repeat(1, M, 1), traj_in], dim=2)
 
         return F.softmax(self.score_mlp(input_tenor).squeeze(-1), dim=-1)
 
-    def loss(self, feat_in, traj_in, traj_gt, reduction="mean"):
+    def loss(self, feat_in, traj_in, traj_gt):
         """
         compute loss
         :param feat_in: input feature, torch.Tensor, [batch_size, feat_channels]
@@ -88,19 +92,22 @@ class TrajScoreSelection(nn.Module):
         :param traj_gt: gt trajectories, torch.Tensor, [batch_size, horizon * 2]
         :return:
         """
+        # batch_size = traj_in.shape[0]
 
         # compute ground truth score
         score_gt = F.softmax(-distance_metric(traj_in, traj_gt)/self.temper, dim=1)
         score_pred = self.forward(feat_in, traj_in)
 
-        return F.mse_loss(score_pred, score_gt, reduction=reduction)
-        # logprobs = - torch.log(score_pred)
-        # batch = traj_in.shape[0]
+        # return F.mse_loss(score_pred, score_gt, reduction='sum')
+        logprobs = - torch.log(score_pred)
+
+        # loss = torch.sum(torch.mul(logprobs, score_gt)) / batch_size
+        loss = torch.sum(torch.mul(logprobs, score_gt))
         # if reduction == 'mean':
-        #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch
+        #     loss = torch.sum(torch.mul(logprobs, score_gt)) / batch_size
         # else:
         #     loss = torch.sum(torch.mul(logprobs, score_gt))
-        # return loss
+        return loss
 
     def inference(self, feat_in: torch.Tensor, traj_in: torch.Tensor):
         """
@@ -109,7 +116,6 @@ class TrajScoreSelection(nn.Module):
         :param traj_in: candidate trajectories, torch.Tensor, [batch_size, M, horizon * 2]
         :return: [batch_size, M]
         """
-        # todo: implement greedy selection algorithm
         return self.forward(feat_in, traj_in)
 
 

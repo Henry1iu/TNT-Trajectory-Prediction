@@ -22,9 +22,16 @@ def test(args):
     "param args:
     :return:
     """
+    # config
+    time_stamp = datetime.now().strftime("%m-%d-%H-%M")
+    output_dir = pjoin(args.save_dir, time_stamp)
+    if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+        raise Exception("The output folder does exists and is not empty! Check the folder.")
+    else:
+        os.makedirs(output_dir)
 
     # data loading
-    test_set = ArgoverseInMem(pjoin(args.data_root, "val_intermediate"))
+    test_set = ArgoverseInMem(pjoin(args.data_root, "test_intermediate"))
 
     # init trainer
     trainer = TNTTrainer(
@@ -37,6 +44,7 @@ def test(args):
         enable_log=False,
         with_cuda=args.with_cuda,
         cuda_device=args.cuda_device,
+        save_folder=output_dir,
         ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
         model_path=args.resume_model if hasattr(args, "resume_model") and args.resume_model else None
     )
@@ -66,5 +74,6 @@ if __name__ == "__main__":
                         default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/01-22-18-55/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
+    parser.add_argument("-s", "--save_dir", type=str, default="test_result")
     args = parser.parse_args()
     test(args)

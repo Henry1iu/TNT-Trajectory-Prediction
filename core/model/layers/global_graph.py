@@ -30,18 +30,17 @@ class GlobalGraph(nn.Module):
 
         in_channels = self.in_channels
         for i in range(num_global_layers):
-            # self.layers.add_module(
-            #     f'glp_{i}', SelfAttentionLayer(self.in_channels,
-            #                                    self.global_graph_width,
-            #                                    need_scale,
-            #                                    with_norm)
-            # )
-
             self.layers.add_module(
-                # f'glp_{i}', SelfAttentionFCLayer(in_channels, self.global_graph_width)
-                f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
-                # f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
+                f'glp_{i}', SelfAttentionFCLayer(in_channels,
+                                                 self.global_graph_width,
+                                                 need_scale)
             )
+
+            # self.layers.add_module(
+            #     # f'glp_{i}', SelfAttentionFCLayer(in_channels, self.global_graph_width)
+            #     f'glp_{i}', GATv2Conv(in_channels, self.global_graph_width, add_self_loops=False)
+            #     # f'glp_{i}', TransformerConv(in_channels=in_channels, out_channels=self.global_graph_width)
+            # )
             in_channels = self.global_graph_width
 
     def forward(self, global_data, **kwargs):
@@ -62,6 +61,7 @@ class GlobalGraph(nn.Module):
 
             elif isinstance(layer, SelfAttentionFCLayer):
                 x = layer(x, valid_lens, **kwargs)
+                # x = layer(x, valid_lens)
 
         return x
 
@@ -109,7 +109,8 @@ class SelfAttentionLayer(MessagePassing):
     def message(self, x_j):
         return x_j
 
-    def masked_softmax(self, X, valid_len):
+    @staticmethod
+    def masked_softmax(X, valid_len):
         """
         masked softmax for attention scores
         args:
@@ -124,10 +125,11 @@ class SelfAttentionLayer(MessagePassing):
             else:
                 valid_len = valid_len.reshape(-1)
             # Fill masked elements with a large negative, whose exp is 0
-            X = X.reshape(-1, shape[-1])
-            for count, row in enumerate(X):
-                row[int(valid_len[count]):] = -1e6
-            return nn.functional.softmax(X.reshape(shape), dim=-1)
+            mask = torch.ones_like(X, dtype=torch.bool)
+            for batch_id, cnt in enumerate(valid_len):
+                mask[batch_id, :cnt] = False
+            X_masked = X.masked_fill(mask, -1e12)
+            return nn.functional.softmax(X_masked, dim=-1)
 
 
 class SelfAttentionFCLayer(nn.Module):
@@ -145,46 +147,48 @@ class SelfAttentionFCLayer(nn.Module):
             int(np.sqrt(self.in_channels)) if need_scale else 1
 
     def forward(self, x, valid_len, batch_size):
-        # print(x.shape)
-        # print(self.q_lin)
         x = x.view(batch_size, -1, self.in_channels)
 
         query = self.q_lin(x)
         key = self.k_lin(x)
         value = self.v_lin(x)
-        print("shape of key: {};".format(key.shape))
+        # print("shape of key: {};".format(key.shape))
         scores = torch.bmm(query, key.transpose(1, 2))
         attention_weights = self.masked_softmax(scores, valid_len)
-        return torch.bmm(attention_weights, value)
+        x = torch.bmm(attention_weights, value).reshape(-1, self.in_channels)
+        return x
 
-    def masked_softmax(self, X, valid_len):
+    @staticmethod
+    def masked_softmax(X, valid_len):
         """
         masked softmax for attention scores
         args:
             X: 3-D tensor, valid_len: 1-D or 2-D tensor
         """
         if valid_len is None:
-            return F.softmax(X, dim=-1)
+            return nn.functional.softmax(X, dim=-1)
         else:
             shape = X.shape
-            if valid_len.dim() == 1:
-                valid_len = torch.repeat_interleave(valid_len, repeats=shape[1], dim=0)
+            if valid_len.shape[0] != shape[0]:
+                valid_len = torch.repeat_interleave(valid_len, repeats=shape[0], dim=0)
             else:
                 valid_len = valid_len.reshape(-1)
             # Fill masked elements with a large negative, whose exp is 0
-            X = X.view(-1, shape[-1])
-            for count, row in enumerate(X):
-                row[int(valid_len[count]):] = -1e6
-            return F.softmax(X.reshape(shape), dim=-1)
+            mask = torch.zeros_like(X, dtype=torch.bool)
+            for batch_id, cnt in enumerate(valid_len):
+                mask[batch_id, :, cnt:] = True
+                mask[batch_id, cnt:] = True
+            X_masked = X.masked_fill(mask, -1e32)
+            return nn.functional.softmax(X_masked, dim=-1) * (1 - mask.float())
 
 
 if __name__ == "__main__":
-    data = Data(x=torch.tensor([[1.0], [7.0]]),
+    data = Data(x=torch.tensor([[[1.0], [7.0]]]),
                 edge_index=torch.tensor([[0, 1], [1, 0]]),
                 valid_lens=torch.tensor([1]))
-    print(data)
+    print(data.x.size())
 
-    layer = SelfAttentionLayer(1, 1)
+    layer = SelfAttentionFCLayer(1, 1)
 
     for k, v in layer.state_dict().items():
         if k.endswith('weight'):
@@ -192,4 +196,4 @@ if __name__ == "__main__":
         elif k.endswith('bias'):
             v[:] = torch.tensor([1.0])
 
-    y = layer(data)
+    y = layer(data.x, data.valid_lens, 1)

@@ -59,6 +59,7 @@ class SubGraph(nn.Module):
         x = out_data.x
 
         assert x.shape[0] % int(sub_data.time_step_len[0]) == 0
+
         return F.normalize(x, p=2.0, dim=1)      # L2 normalization
 # %%
 

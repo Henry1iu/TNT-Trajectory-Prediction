@@ -27,7 +27,8 @@ class VectorNetBackbone(nn.Module):
                  device=torch.device("cpu")):
         super(VectorNetBackbone, self).__init__()
         # some params
-        self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
+        # self.polyline_vec_shape = in_channels * (2 ** num_subgraph_layres)
+        self.polyline_vec_shape = subgraph_width * 2
         self.subgraph_width = subgraph_width
         self.global_graph_width = global_graph_width
         self.max_n_guesses = 1
@@ -49,9 +50,19 @@ class VectorNetBackbone(nn.Module):
                 nn.Linear(global_graph_width, aux_mlp_width),
                 nn.LayerNorm(aux_mlp_width),
                 nn.ReLU(),
+                nn.Linear(aux_mlp_width, aux_mlp_width),
+                nn.LayerNorm(aux_mlp_width),
+                nn.ReLU(),
                 nn.Linear(aux_mlp_width, self.polyline_vec_shape)
             )
+            # self.aux_mlp.apply(self._init_weights)
             # self.aux_mlp = nn.DataParallel(self.aux_mlp, device_ids=[1, 0])
+
+    # @staticmethod
+    # def _init_weights(m):
+    #     if isinstance(m, nn.Linear):
+    #         torch.nn.init.xavier_uniform_(m.weight)
+    #         m.bias.data.fill_(0.01)
 
     def forward(self, data):
         """
@@ -76,7 +87,7 @@ class VectorNetBackbone(nn.Module):
         # reconstruct the batch global interaction graph data
         sub_graph_out.valid_lens = data.valid_len
         sub_graph_out.time_step_len = data.time_step_len
-        sub_graph_out.x = F.normalize(sub_graph_out.x, dim=0)
+        # sub_graph_out.x = F.normalize(sub_graph_out.x, dim=0)
 
         edge_index = torch.empty((2, 0), device=self.device, dtype=torch.long)
         # print("[Debug]: data type: {}".format(type(data)))
@@ -105,8 +116,8 @@ class VectorNetBackbone(nn.Module):
             # mask out the features for a random subset of polyline nodes
             # for one batch, we mask the same polyline features
 
-            # global_graph_out = self.global_graph(sub_graph_out, batch_size=data.num_graphs)
-            global_graph_out = self.global_graph(sub_graph_out)
+            global_graph_out = self.global_graph(sub_graph_out, batch_size=data.num_graphs)
+            # global_graph_out = self.global_graph(sub_graph_out)
             global_graph_out = global_graph_out.view(-1, time_step_len, self.global_graph_width)
 
             if self.with_aux:
@@ -118,8 +129,8 @@ class VectorNetBackbone(nn.Module):
                 return global_graph_out, None, None
 
         else:
-            # global_graph_out = self.global_graph(sub_graph_out, batch_size=data.num_graphs)
-            global_graph_out = self.global_graph(sub_graph_out)
+            global_graph_out = self.global_graph(sub_graph_out, batch_size=data.num_graphs)
+            # global_graph_out = self.global_graph(sub_graph_out)
             global_graph_out = global_graph_out.view(-1, time_step_len, self.global_graph_width)
 
             return global_graph_out, None, None

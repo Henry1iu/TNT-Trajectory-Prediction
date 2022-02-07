@@ -57,14 +57,14 @@ class ArgoversePreprocessor(Preprocessor):
         seq_f_name, ext = os.path.splitext(seq_f_name_ext)
 
         df = copy.deepcopy(seq.seq_df)
-        return self.process_and_save(df, file_name=seq_f_name, dir_=self.save_dir)
+        return self.process_and_save(df, seq_id=seq_f_name, dir_=self.save_dir)
 
-    def process(self, dataframe: pd.DataFrame,  map_feat=True):
+    def process(self, dataframe: pd.DataFrame,  seq_id, map_feat=True):
         data = self.read_argo_data(dataframe)
         data = self.get_obj_feats(data)
 
         data['graph'] = self.get_lane_graph(data)
-
+        data['seq_id'] = seq_id
         # visualization for debug purpose
         # self.visualize_data(data)
         return pd.DataFrame(
@@ -147,7 +147,7 @@ class ArgoversePreprocessor(Preprocessor):
 
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
         if self.split == "test":
-            tar_candts_gt, tar_offse_gt = None, None
+            tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
             splines, ref_idx = None, None
         else:
             splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
@@ -412,12 +412,14 @@ if __name__ == "__main__":
     root = "/media/Data/autonomous_driving/Argoverse"
     raw_dir = os.path.join(root, "raw_data")
     # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0804_small"
+    interm_dir = "/home/jb/projects/Data/traj_pred/interm_data"
 
-    # for split in ["train", "val", "test"]:
-    for split in ["test"]:
+    for split in ["val", "train", "test"]:
         # construct the preprocessor and dataloader
-        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir, normalized=False)
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir,
+                                                    split=split,
+                                                    save_dir=interm_dir,
+                                                    normalized=False if split == "test" else True)
         loader = DataLoader(argoverse_processor,
                             batch_size=16,
                             num_workers=16,
@@ -427,3 +429,7 @@ if __name__ == "__main__":
 
         for i, data in enumerate(tqdm(loader)):
             pass
+            # if split == "train" and i >= 500:
+            #     break
+            # elif split == "val" and i >= 100:
+            #     break

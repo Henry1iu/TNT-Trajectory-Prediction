@@ -7,12 +7,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import DataLoader
 
-from core.model.backbone.vectornet import VectorNetBackbone
-# from core.model.backbone.vectornet_v2 import VectorNetBackbone
+# from core.model.backbone.vectornet import VectorNetBackbone
+from core.model.backbone.vectornet_v2 import VectorNetBackbone
 from core.model.layers.target_prediction import TargetPred
 # from core.model.layers.target_prediction_v2 import TargetPred
 from core.model.layers.motion_etimation import MotionEstimation
 from core.model.layers.scoring_and_selection import TrajScoreSelection, distance_metric
+from core.loss import TNTLoss
 
 from core.dataloader.argoverse_loader_v2 import GraphData, ArgoverseInMem
 
@@ -35,7 +36,7 @@ class TNT(nn.Module):
                  k=6,
                  lambda1=0.1,
                  lambda2=1.0,
-                 lambda3=1.0,
+                 lambda3=0.1,
                  device=torch.device("cpu"),
                  multi_gpu: bool = False):
         """
@@ -72,6 +73,9 @@ class TNT(nn.Module):
         self.with_aux = with_aux
 
         self.device = device
+        self.criterion = TNTLoss(
+            self.lambda1, self.lambda2, self.lambda3, temperature, aux_loss=self.with_aux, device=self.device
+        )
 
         # feature extraction backbone
         self.backbone = VectorNetBackbone(
@@ -105,12 +109,68 @@ class TNT(nn.Module):
         )
         self._init_weight()
 
-        # if multi_gpu:
-        #     self.target_pred_layer = nn.DataParallel(self.target_pred_layer)
-        #     self.motion_estimator = nn.DataParallel(self.motion_estimator)
-        #     self.traj_score_layer = nn.DataParallel(self.traj_score_layer)
-
     def forward(self, data):
+        """
+        output prediction for training
+        :param data: observed sequence data
+        :return: dict{
+                        "target_prob":  the predicted probability of each target candidate,
+                        "offset":       the predicted offset of the target position from the gt target candidate,
+                        "traj_with_gt": the predicted trajectory with the gt target position as the input,
+                        "traj":         the predicted trajectory without the gt target position,
+                        "score":        the predicted score for each predicted trajectory,
+                     }
+        """
+        n = data.candidate_len_max[0]
+
+        target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
+        batch_size, _, _ = target_candidate.size()
+        candidate_mask = data.candidate_mask.view(-1, n)
+
+        # feature encoding
+        global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
+        target_feat = global_feat[:, 0].unsqueeze(1)
+
+        # predict prob. for each target candidate, and corresponding offest
+        target_prob, offset = self.target_pred_layer(target_feat, target_candidate, candidate_mask)
+
+        # predict the trajectory given the target gt
+        target_gt = data.target_gt.view(-1, 1, 2)
+        traj_with_gt = self.motion_estimator(target_feat, target_gt)
+
+        # predict the trajectories for the M most-likely predicted target, and the score
+        _, indices = target_prob.topk(self.m, dim=1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
+        target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset[batch_idx, indices]
+        trajs = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
+        score = self.traj_score_layer(target_feat, trajs)
+
+        return {
+            "target_prob": target_prob,
+            "offset": offset,
+            "traj_with_gt": traj_with_gt,
+            "traj": trajs,
+            "score": score
+        }, aux_out, aux_gt
+
+    def loss(self, data):
+        """
+        compute loss according to the gt
+        :param data: node feature data
+        :return: loss
+        """
+        n = data.candidate_len_max[0]
+        pred, aux_out, aux_gt = self.forward(data)
+
+        gt = {
+            "target_prob": data.candidate_gt.view(-1, n),
+            "offset": data.offset_gt.view(-1, 2),
+            "y": data.y.view(-1, self.horizon * 2)
+        }
+
+        return self.criterion(pred, gt, aux_out, aux_gt)
+
+    def inference(self, data):
         """
         predict the top k most-likely trajectories
         :param data: observed sequence data
@@ -121,82 +181,24 @@ class TNT(nn.Module):
         batch_size, _, _ = target_candidate.size()
 
         global_feat, _, _ = self.backbone(data)     # [batch_size, time_step_len, global_graph_width]
-        target_feat = global_feat[:, 0]
+        target_feat = global_feat[:, 0].unsqueeze(1)
 
         # predict the prob. of target candidates and selected the most likely M candidate
-        target_pred, offset_pred = self.target_pred_layer(target_feat, target_candidate)
+        target_prob, offset_pred = self.target_pred_layer(target_feat, target_candidate)
+        _, indices = target_prob.topk(self.m, dim=1)
+        batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
+        target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset_pred[batch_idx, indices]
 
         # # DEBUG
         # gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1)
 
         # trajectory estimation for the m predicted target location
-        traj_pred = self.motion_estimator(target_feat, target_pred+offset_pred)
+        traj_pred = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
 
         # score the predicted trajectory and select the top k trajectory
         score = self.traj_score_layer(target_feat, traj_pred)
 
         return self.traj_selection(traj_pred, score)
-
-    def loss(self, data, reduction="sum"):
-        """
-        compute loss according to the gt
-        :param data: node feature data
-        :param gt: ground truth data
-        :param reduction: reduction method, "mean", "sum"
-        :return:
-        """
-        n = data.candidate_len_max[0]
-
-        target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
-        batch_size, _, _ = target_candidate.size()
-
-        global_feat, aux_out, aux_gt = self.backbone(data)             # [batch_size, time_step_len, global_graph_width]
-        target_feat = global_feat[:, 0]
-
-        loss = 0.0
-        if self.with_aux and self.training:
-            aux_loss = F.smooth_l1_loss(aux_out, aux_gt, reduction=reduction)
-            loss += aux_loss
-
-        candidate_gt, offset_gt, target_gt, y = data.candidate_gt, data.offset_gt, data.target_gt, data.y
-
-        # add the target prediction loss
-        candidate_gt, offset_gt = candidate_gt.view(-1, n), offset_gt.view(-1, 2)
-        candidate_mask = data.candidate_mask.view(-1, n)
-        target_loss, pred_tar, pred_offset = self.target_pred_layer.loss(
-            target_feat,
-            target_candidate,
-            candidate_gt,
-            offset_gt,
-            candidate_mask=candidate_mask,
-            reduction=reduction
-        )
-        loss += self.lambda1 * target_loss
-
-        # add the motion estimation loss
-        location_gt, traj_gt = target_gt.view(-1, 2).float(), y.view(-1, self.horizon * 2)
-        traj_loss = self.motion_estimator.loss(
-            target_feat,
-            location_gt,
-            traj_gt,
-            reduction=reduction
-        )
-        loss += self.lambda2 * traj_loss
-
-        # add the score and selection loss
-        traj_pred = self.motion_estimator(target_feat, pred_tar+pred_offset)
-        score_loss = self.traj_score_layer.loss(
-            target_feat,
-            traj_pred,
-            traj_gt,
-            reduction=reduction
-        )
-        loss += self.lambda3 * score_loss
-
-        return loss, {"target_loss": target_loss, "traj_loss": traj_loss, "score_loss": score_loss}
-
-    def inference(self, data):
-        raise NotImplementedError
 
     def candidate_sampling(self, data):
         """
@@ -218,23 +220,21 @@ class TNT(nn.Module):
         # re-arrange trajectories according the the descending order of the score
         _, batch_order = score.sort(descending=True)
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
-        traj_selected = traj_pred[:, :self.k]           # [batch_size, k, horizon * 2]
+        traj_selected = traj_pred[:, :self.k]                                   # [batch_size, k, horizon * 2]
 
-        # check the distance between them, NMS
+        # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
             traj_cnt = 1
-            for i in range(1, self.m):
-                dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, i].unsqueeze(0))
-                if not torch.any(dis < threshold):                       # not exist similar trajectory
-                    traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, i]  # add this trajectory
-                    traj_cnt += 1
+            while traj_cnt < self.k:
+                for j in range(1, self.m):
+                    dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, j].unsqueeze(0))
+                    if not torch.any(dis < threshold):
+                        traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, j]
 
-                if traj_cnt >= self.k:
-                    break                                                       # break if collect enough traj
-
-            # no enough traj, pad zero traj
-            if traj_cnt < self.k:
-                traj_selected[:, traj_cnt:] = 0.0
+                        traj_cnt += 1
+                    if traj_cnt >= self.k:
+                        break
+                threshold /= 2.0
 
         return traj_selected
 
@@ -242,7 +242,6 @@ class TNT(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 nn.init.kaiming_normal_(module.weight)
-                # module.weight.data.kaiming_uniform_(module)
             elif isinstance(module, nn.BatchNorm2d):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
@@ -254,25 +253,41 @@ class TNT(nn.Module):
 if __name__ == "__main__":
     batch_size = 32
     DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    # DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'test_intermediate')
 
     dataset = ArgoverseInMem(TRAIN_DIR)
-    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=16, pin_memory=True)
+    data_iter = DataLoader(dataset, batch_size=batch_size, num_workers=1, pin_memory=True)
 
-    m = 50
-    k = 6
+    m, k = 50, 6
+    pred_len = 30
 
-    device = torch.device("cuda:1")
-    # device = torch.device("cpu")
+    # device = torch.device("cuda:1")
+    device = torch.device("cpu")
 
-    model = TNT(in_channels=dataset.num_features, m=m, k=k, with_aux=True, device=device).to(device)
+    model = TNT(in_channels=dataset.num_features,
+                horizon=pred_len,
+                m=m,
+                k=k,
+                with_aux=True,
+                device=device).to(device)
+
+    # train mode
     model.train()
-
     for i, data in enumerate(tqdm(data_iter)):
         loss, _ = model.loss(data.to(device))
-        # print("loss dtype:{}".format(loss.dtype))
+        print("Training Pass! loss: {}".format(loss))
 
-        # pred = model(data.to(device))
-        # print("\n[TNT/Debug]: shape of {}th pred: {}".format(i, pred.shape))
+        if i == 2:
+            break
+
+    # eval mode
+    model.eval()
+    for i, data in enumerate(tqdm(data_iter)):
+        pred = model(data.to(device))
+        print("Evaluation Pass! Shape of out: {}".format(pred.shape))
+
+        if i == 2:
+            break
