@@ -210,9 +210,9 @@ class TNTTrainer(Trainer):
     def test(self,
              miss_threshold=2.0,
              compute_metric=False,
-             convert_coordinate=True,
+             convert_coordinate=False,
              plot=False,
-             save_pred=True):
+             save_pred=False):
         """
         test the testset,
         :param miss_threshold: float, the threshold for the miss rate, default 2.0m

@@ -14,12 +14,12 @@ and
 ### Achieved Best Performance
 The best performance achieved by our implementation and reported in the papers. 
 
-| Algorithm | minADE(K=1)  | minFDE(K=1) | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
-| :-------: | :-----------:| :---------: | :-------:| :----------:| :---------: | :-------:|
-| VectorNet (Original) | 1.66        | 3.67       | -        | -           | -           | -        |
-| VectorNet (**Ours**) | 1.707       | 3.880      | 0.648    | -           | -           | -        |
-|  TNT(Original)   | -            | -           | -        | 0.728       | 1.292       | 0.093    |
-|  TNT(**Ours**)   | -            | -           | -        | 1.138       | 2.123       | 0.286    |
+| Algorithm | minADE(K=1) |   minFDE(K=1)   | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
+| :-------: |:-----------:|:---------------:|:--------:| :----------:| :---------: | :-------:|
+| VectorNet (Original) |    1.66     |      3.67       |    -     | -           | -           | -        |
+| VectorNet (**Ours**) |    1.49     |      3.25       |  0.561   | -           | -           | -        |
+|  TNT(Original)   |      -      |        -        |    -     | 0.728       | 1.292       | 0.093    |
+|  TNT(**Ours**)   |      -      |        -        |    -     | 1.138       | 2.123       | 0.286    |
 
 ## Setup
 
@@ -89,14 +89,27 @@ If you store the raw data at a different location, you can change relative path 
 
 ### Inference
 
-**TBD**
+A python script named "test_tnt.py" is provided for the inference of TNT model. 
+It can make prediction on the test set and generate .h5 files required by the Argoverse benchmark. 
+You need to specify the file path to your trained model file or checkpoint.
+Since the model are trained in the relative coordinate, a coordinate conversion has been enabled to recover the 
+world coordinates of the predicted trajectories.
+
+> **Reminding**: Specify either the file path to the checkpoint or the trained model. 
+> Also, specify the path to your dataset if you are using a different directory structure.
+
+The prediction result can be genearted withe command:
+```
+python test_tnt.py -rm Path_to_Your_Model_File
+```
 
 ## Others
 
+**TBD**
 
 ### TODO
 1. Data-Related:
-- [ ] Preprocessing of test set;
+- [x] Preprocessing of test set;
 
 2. Model-Related:
 - [ ] Create a base class for models;
@@ -106,7 +119,7 @@ If you store the raw data at a different location, you can change relative path 
 - [ ] Enable loading data from the hard disk. 
 
 4. Inference-Related:
-- [ ] Provide the inference function to visualize the input sequences and corresponding results.
+- [x] Provide the inference function to visualize the input sequences and corresponding results.
 
 ### Citing
 
