@@ -122,7 +122,7 @@ class ArgoversePreprocessor(Preprocessor):
 
         # comput the rotation matrix
         if self.normalized:
-            pre, conf, _ = self.am.get_lane_direction_traj(traj=data['trajs'][0][:self.obs_horizon], city_name=data['city'])
+            pre, conf = self.am.get_lane_direction(data['trajs'][0][self.obs_horizon-1], data['city'])
             if conf <= 0.1:
                 pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
             theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
