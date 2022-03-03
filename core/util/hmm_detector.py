@@ -136,7 +136,7 @@ class HMMDetector(object):
                 viterbi[t, s] = np.max(p)
                 best_path_table[t, s] = np.argmax(p)
 
-            viterbi[t, :] /= np.sum(viterbi[t, :])          # normalization
+            viterbi[t, :] /= np.linalg.norm(viterbi[t, :])          # normalization
 
         # Back-tracking
         best_path[-1] = viterbi[-1, :].argmax()             # last state
@@ -192,11 +192,13 @@ class ArgoversePreprocessor(Dataset):
         # get the road centrelines
         lanes = self.am.find_local_lane_centerlines(orig[0], orig[1], city_name=city)
         candidate_lanes = self.am.get_candidate_centerlines_for_traj(traj[:self.obs_horizon], city_name=city)
-        candidate_lane_seq = self.hmm.detect(traj[:self.obs_horizon], candidate_lanes)
+        # candidate_lane_seq = self.hmm.detect(traj[:self.obs_horizon], candidate_lanes)
+        candidate_lane_seq = self.hmm.detect(traj, candidate_lanes)
         print("candidate_lane_seq: ", candidate_lane_seq)
         # weight = (np.arange(self.obs_horizon) + 1) / self.obs_horizon
         # candidate_lane_id = np.bincount(candidate_lane_seq, weights=weight).argmax()
-        candidate_lane_id = np.bincount(candidate_lane_seq).argmax()
+        # candidate_lane_id = np.bincount(candidate_lane_seq).argmax()
+        candidate_lane_id = candidate_lane_seq[-1]
 
         # get the rotation
         lane_dir_vector, conf, nearest = self.am.get_lane_direction_traj(traj=traj[:self.obs_horizon], city_name=city)
@@ -228,7 +230,8 @@ class ArgoversePreprocessor(Dataset):
 
             visualize_centerline(self.axs[0], lanes, orig, rot_)
             # visualize_centerline(self.axs[0], [nearest], orig, rot_, color='red')
-            visualize_centerline(self.axs[0], [candidate_lanes[candidate_lane_id]], orig, rot_, color='red')
+            visualize_centerline(self.axs[0], candidate_lanes, orig, rot_, color='blue')
+            # visualize_centerline(self.axs[0], [candidate_lanes[candidate_lane_id]], orig, rot_, color='red')
 
             self.axs[0].set_title("The Original")
 
@@ -239,11 +242,12 @@ class ArgoversePreprocessor(Dataset):
             self.axs[1].set_ylim([-50, 50])
 
             visualize_centerline(self.axs[1], lanes, orig, rot)
-            visualize_centerline(self.axs[1], [nearest], orig, rot, color='red')
-            # visualize_centerline(self.axs[0], [candidate_lanes[np.bincount(candidate_lane_seq).argmax()]], orig, rot_, color='red')
+            # visualize_centerline(self.axs[1], [nearest], orig, rot, color='red')
+            visualize_centerline(self.axs[1], [candidate_lanes[candidate_lane_id]], orig, rot, color='red')
 
             self.axs[1].set_title("The Rotated")
 
+            self.fig.canvas.manager.set_window_title("Sequence id: {}".format(idx))
             self.fig.show()
             self.fig.waitforbuttonpress()
             for ax in tuple(self.axs):

@@ -3,6 +3,7 @@
 # Date: 2021.07.16
 
 import os
+import argparse
 from os.path import join as pjoin
 import copy
 import numpy as np
@@ -57,14 +58,17 @@ class ArgoversePreprocessor(Preprocessor):
         seq_f_name, ext = os.path.splitext(seq_f_name_ext)
 
         df = copy.deepcopy(seq.seq_df)
-        return self.process_and_save(df, file_name=seq_f_name, dir_=self.save_dir)
+        return self.process_and_save(df, seq_id=seq_f_name, dir_=self.save_dir)
 
-    def process(self, dataframe: pd.DataFrame,  map_feat=True):
+    def process(self, dataframe: pd.DataFrame,  seq_id, map_feat=True):
         data = self.read_argo_data(dataframe)
         data = self.get_obj_feats(data)
 
-        data['graph'] = self.get_lane_graph(data)
+        if not data:
+            return None
 
+        data['graph'] = self.get_lane_graph(data)
+        data['seq_id'] = seq_id
         # visualization for debug purpose
         # self.visualize_data(data)
         return pd.DataFrame(
@@ -130,13 +134,18 @@ class ArgoversePreprocessor(Preprocessor):
                 [np.sin(theta), np.cos(theta)]], np.float32)
         else:
             # if not normalized, do not rotate.
+            theta = None
             rot = np.asarray([
                 [1.0, 0.0],
                 [0.0, 1.0]], np.float32)
 
         # get the target candidates and candidate gt
-        agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
-        agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
+        agt_traj_obs = data['trajs'][0][0:self.obs_horizon].copy().astype(np.float32)
+        displacement = np.sqrt((agt_traj_obs[0, 0] - agt_traj_obs[-1, 0]) ** 2 + (agt_traj_obs[0, 1] - agt_traj_obs[-1, 1]) ** 2)
+        if displacement < 20.0:
+            return None
+
+        agt_traj_fut = data['trajs'][0][self.obs_horizon:(self.obs_horizon+self.pred_horizon)].copy().astype(np.float32)
         ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
         # rotate the center lines and find the reference center line
@@ -145,8 +154,14 @@ class ArgoversePreprocessor(Preprocessor):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
 
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
+        if self.normalized:
+            tar_candts = tar_candts[tar_candts[:, 1] >= 0, :]
+            if len(tar_candts) == 0:
+                print("no candidates")
+                ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
+
         if self.split == "test":
-            tar_candts_gt, tar_offse_gt = None, None
+            tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
             splines, ref_idx = None, None
         else:
             splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
@@ -407,22 +422,31 @@ def ref_copy(data):
 
 
 if __name__ == "__main__":
-    # config path
-    root = "/media/Data/autonomous_driving/Argoverse"
-    raw_dir = os.path.join(root, "raw_data")
-    # inter_dir = os.path.join(root, "intermediate")
-    interm_dir = "/home/jb/projects/Data/traj_pred/interm_tnt_n_s_0923"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--root", type=str, default="dataset")
+    parser.add_argument("-d", "--dest", type=str, default="dataset")
+    parser.add_argument("-s", "--small", action='store_true', default=False)
+    args = parser.parse_args()
 
-    # for split in ["train", "val", "test"]:
-    for split in ["test"]:
+    # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
+    raw_dir = os.path.join(args.root, "raw_data")
+    interm_dir = os.path.join(args.dest, "interm_data_ns" if not args.small else "interm_data_ns_small")
+
+    for split in ["train", "val", "test"]:
         # construct the preprocessor and dataloader
-        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir, normalized=False)
+        argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,
                             batch_size=16,
                             num_workers=16,
                             shuffle=False,
-                            pin_memory=True,
+                            pin_memory=False,
                             drop_last=False)
 
-        for i, data in enumerate(tqdm(loader)):
-            pass
+        for i, tag in enumerate(tqdm(loader)):
+            if args.small:
+                if split == "train" and i >= 200:
+                    break
+                elif split == "val" and i >= 50:
+                    break
+                elif split == "test" and i >= 50:
+                    break
