@@ -147,7 +147,7 @@ class Preprocessor(Dataset):
             plt.ylabel("Map Y")
             plt.axis("off")
             plt.title("No. of lane candidates = {}; No. of target candidates = {};".format(len(centerline_list), len(candidates)))
-            plt.show(block=False)
+            plt.show()
 
         return candidates
 

@@ -105,7 +105,7 @@ class ArgoverseInMem(InMemoryDataset):
             graph_input = GraphData(
                 x=torch.from_numpy(x).float(),
                 y=torch.from_numpy(y).float(),
-                cluster=torch.from_numpy(cluster).short(),
+                cluster=torch.from_numpy(cluster).long(),
                 edge_index=torch.from_numpy(edge_index).long(),
                 identifier=torch.from_numpy(identifier).float(),    # the identify embedding of global graph completion
 
@@ -138,15 +138,16 @@ class ArgoverseInMem(InMemoryDataset):
 
         # pad feature with zero nodes
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
-        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad)])
-        data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.x.dtype)])
+        data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad, dtype=data.cluster.dtype)])
+        data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.identifier.dtype)])
 
         # pad candidate and candidate_gt
         num_cand_max = data.candidate_len_max[0].item()
         data.candidate_mask = torch.cat([torch.ones((len(data.candidate), 1)),
                                          torch.zeros((num_cand_max - len(data.candidate), 1))])
         data.candidate = torch.cat([data.candidate, torch.zeros((num_cand_max - len(data.candidate), 2))])
-        data.candidate_gt = torch.cat([data.candidate_gt, torch.zeros((num_cand_max - len(data.candidate_gt), 1))])
+        data.candidate_gt = torch.cat([data.candidate_gt,
+                                       torch.zeros((num_cand_max - len(data.candidate_gt), 1), dtype=data.candidate_gt.dtype)])
 
         return data
 
@@ -200,7 +201,7 @@ class ArgoverseInMem(InMemoryDataset):
             if len(indices) <= 1:
                 continue                # skip if only 1 node
             if cluster_idc < traj_cnt:
-                edge_index = np.hstack([edge_index, get_traj_edge_index(indices)])
+                edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
             else:
                 edge_index = np.hstack([edge_index, get_fc_edge_index(indices)])
         return feats, cluster, edge_index, identifier
