@@ -163,10 +163,9 @@ class Preprocessor(Dataset):
         for line in centerline_list:
             sp = Spline2D(x=line[:, 0], y=line[:, 1])
             s = list(np.arange(0, sp.s[-1], distance))
-            for s_i in s:
-                ix, iy = sp.calc_global_position_online(s_i)
-                candidates.append([ix, iy])
-        candidates = np.unique(np.asarray(candidates), axis=0)
+            ix, iy = sp.calc_global_position_online(s)
+            candidates.append(np.stack([ix, iy], axis=1))
+        candidates = np.unique(np.concatenate(candidates), axis=0)
 
         if viz:
             fig = plt.figure(0, figsize=(8, 7))

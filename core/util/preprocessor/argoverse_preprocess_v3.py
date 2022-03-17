@@ -3,6 +3,7 @@
 # Date: 2021.07.16
 
 import os
+import sys
 import argparse
 from os.path import join as pjoin
 import copy
@@ -146,10 +147,6 @@ class ArgoversePreprocessor(Preprocessor):
 
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0:self.obs_horizon].copy().astype(np.float32)
-        # displacement = np.sqrt((agt_traj_obs[0, 0] - agt_traj_obs[-1, 0]) ** 2 + (agt_traj_obs[0, 1] - agt_traj_obs[-1, 1]) ** 2)
-        # if displacement < 20.0:
-        #     return None
-
         agt_traj_fut = data['trajs'][0][self.obs_horizon:(self.obs_horizon+self.pred_horizon)].copy().astype(np.float32)
         ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
@@ -234,12 +231,6 @@ class ArgoversePreprocessor(Preprocessor):
         # plot the splines
         # self.plot_reference_centerlines(ctr_line_candts, splines, feats[0], gt_preds[0], ref_idx)
 
-        # # target candidate filtering
-        # tar_candts = np.matmul(rot, (tar_candts - orig.reshape(-1, 2)).T).T
-        # inlier = np.logical_and(np.fabs(tar_candts[:, 0]) <= self.obs_range, np.fabs(tar_candts[:, 1]) <= self.obs_range)
-        # if not np.any(candts_gt[inlier]):
-        #     raise Exception("The gt of target candidate exceeds the observation range!")
-
         data['orig'] = orig
         data['theta'] = theta
         data['rot'] = rot
@@ -253,8 +244,10 @@ class ArgoversePreprocessor(Preprocessor):
         data['gt_candts'] = tar_candts_gt
         data['gt_tar_offset'] = tar_offse_gt
 
-        data['ref_ctr_lines'] = splines         # the reference candidate centerlines Spline for prediction
-        data['ref_cetr_idx'] = ref_idx          # the idx of the closest reference centerlines
+        # for target line prediction
+        data['ref_ctr_lines'] = ctr_line_candts     # the target centerline candidates for the agent
+        data['ref_ctr_lines_s'] = splines           # the reference candidate centerlines Spline for prediction
+        data['ref_cetr_idx'] = ref_idx              # the idx of the closest reference centerlines
         return data
 
     def get_lane_graph(self, data):
@@ -277,12 +270,6 @@ class ArgoversePreprocessor(Preprocessor):
                 """Getting polygons requires original centerline"""
                 polygon = self.am.get_lane_segment_polygon(lane_id, data['city'])
                 polygon = copy.deepcopy(polygon)
-
-                # rescale centerines
-                # spline_ctr = Spline2D(x, y)
-                # s_rescaled = np.arange(0, spline_ctr.s[-1], RESCALE_LENGTH)
-                # x_rescaled, y_rescaled = spline_ctr.calc_global_position_online(s_rescaled)
-                # lane.centerline = np.stack([x_rescaled, y_rescaled], axis=1)
                 lane.centerline = centerline
                 lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
                 lanes[lane_id] = lane
@@ -366,7 +353,6 @@ class ArgoversePreprocessor(Preprocessor):
         if len(cline_list) == 1:
             return [Spline2D(x=cline_list[0][:, 0], y=cline_list[0][:, 1])], 0
         else:
-            line_idx = 0
             ref_centerlines = [Spline2D(x=cline_list[i][:, 0], y=cline_list[i][:, 1]) for i in range(len(cline_list))]
 
         # hmm detection
@@ -442,8 +428,8 @@ if __name__ == "__main__":
         # construct the preprocessor and dataloader
         argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,
-                            batch_size=1,
-                            num_workers=1,
+                            batch_size=1 if sys.gettrace() else 16,     # 1 batch in debug mode
+                            num_workers=1 if sys.gettrace() else 16,    # use only 1 worker in debug mode
                             shuffle=False,
                             pin_memory=False,
                             drop_last=False)
