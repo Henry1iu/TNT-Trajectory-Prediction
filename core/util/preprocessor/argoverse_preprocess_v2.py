@@ -141,10 +141,6 @@ class ArgoversePreprocessor(Preprocessor):
 
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0:self.obs_horizon].copy().astype(np.float32)
-        displacement = np.sqrt((agt_traj_obs[0, 0] - agt_traj_obs[-1, 0]) ** 2 + (agt_traj_obs[0, 1] - agt_traj_obs[-1, 1]) ** 2)
-        if displacement < 20.0:
-            return None
-
         agt_traj_fut = data['trajs'][0][self.obs_horizon:(self.obs_horizon+self.pred_horizon)].copy().astype(np.float32)
         ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
@@ -154,11 +150,8 @@ class ArgoversePreprocessor(Preprocessor):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
 
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
-        if self.normalized:
+        if self.normalized and len(tar_candts[tar_candts[:, 1] >= 0, :]) != 0:
             tar_candts = tar_candts[tar_candts[:, 1] >= 0, :]
-            if len(tar_candts) == 0:
-                print("no candidates")
-                ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
