@@ -109,7 +109,9 @@ class TNTLoss(nn.Module):
         # cls_loss = F.binary_cross_entropy_with_logits(
         cls_loss = F.binary_cross_entropy(
             pred_dict['target_prob'], gt_dict['target_prob'].float(), reduction='none')
-        offset = pred_dict['offset'][gt_dict['target_prob'].bool()]
+
+        gt_idx = gt_dict['target_prob'].nonzero()
+        offset = pred_dict['offset'][gt_idx[:, 0], gt_idx[:, 1]]
 
         cls_loss, indices = torch.topk(cls_loss, self.m, dim=1)    # largest 50
         cls_loss = cls_loss.sum(1).mean()
