@@ -16,8 +16,8 @@ class Spline:
     def __init__(self, x, y):
         self.b, self.c, self.d, self.w = [], [], [], []
 
-        self.x = x
-        self.y = y
+        self.x = np.array(x)
+        self.y = np.array(y)
 
         self.eps = np.finfo(float).eps
 
@@ -25,7 +25,7 @@ class Spline:
         h = np.diff(x)
 
         # calc coefficient c
-        self.a = [iy for iy in y]
+        self.a = np.array([iy for iy in y])
 
         # calc coefficient c
         A = self.__calc_A(h)
@@ -39,23 +39,25 @@ class Spline:
             tb = (self.a[i + 1] - self.a[i]) / (h[i] + self.eps) - h[i] * \
                 (self.c[i + 1] + 2.0 * self.c[i]) / 3.0
             self.b.append(tb)
+        self.b = np.array(self.b)
+        self.d = np.array(self.d)
 
     def calc(self, t):
         """
         Calc position
         if t is outside of the input x, return None
         """
-
-        if t < self.x[0]:
-            return None
-        elif t > self.x[-1]:
-            return None
+        t = np.asarray(t)
+        mask = np.logical_and(t < self.x[0], t > self.x[-1])
+        t[mask] = self.x[0]
 
         i = self.__search_index(t)
-        dx = t - self.x[i]
+        dx = t - self.x[i.astype(int)]
         result = self.a[i] + self.b[i] * dx + \
             self.c[i] * dx ** 2.0 + self.d[i] * dx ** 3.0
 
+        result = np.asarray(result)
+        result[mask] = None
         return result
 
     def calcd(self, t):
@@ -63,37 +65,41 @@ class Spline:
         Calc first derivative
         if t is outside of the input x, return None
         """
-
-        if t < self.x[0]:
-            return None
-        elif t > self.x[-1]:
-            return None
+        t = np.asarray(t)
+        mask = np.logical_and(t < self.x[0], t > self.x[-1])
+        t[mask] = 0
 
         i = self.__search_index(t)
         dx = t - self.x[i]
         result = self.b[i] + 2.0 * self.c[i] * dx + 3.0 * self.d[i] * dx ** 2.0
+
+        result = np.asarray(result)
+        result[mask] = None
         return result
 
     def calcdd(self, t):
         """
         Calc second derivative
         """
-
-        if t < self.x[0]:
-            return None
-        elif t > self.x[-1]:
-            return None
+        t = np.asarray(t)
+        mask = np.logical_and(t < self.x[0], t > self.x[-1])
+        t[mask] = 0
 
         i = self.__search_index(t)
         dx = t - self.x[i]
         result = 2.0 * self.c[i] + 6.0 * self.d[i] * dx
+
+        result = np.asarray(result)
+        result[mask] = None
         return result
 
     def __search_index(self, x):
         """
         search data segment index
         """
-        return bisect.bisect(self.x, x) - 1
+        indices = np.asarray(np.searchsorted(self.x, x, "left") - 1)
+        indices[indices <= 0] = 0
+        return indices
 
     def __calc_A(self, h):
         """
@@ -207,7 +213,7 @@ class Spline2D:
         """
         dx = self.sx.calcd(s)
         dy = self.sy.calcd(s)
-        yaw = math.atan2(dy, dx)
+        yaw = np.arctan2(dy, dx)
         return yaw
 
 
@@ -243,12 +249,9 @@ def main():  # pragma: no cover
     s = np.arange(0, sp.s[-1], ds)
 
     rx, ry, ryaw, rk = [], [], [], []
-    for i_s in s:
-        ix, iy = sp.calc_global_position_online(i_s)
-        rx.append(ix)
-        ry.append(iy)
-        ryaw.append(sp.calc_yaw(i_s))
-        rk.append(sp.calc_curvature(i_s))
+    rx, ry = sp.calc_global_position_online(s)
+    ryaw = sp.calc_yaw(s)
+    rk = sp.calc_curvature(s)
 
     plt.subplots(1)
     plt.plot(x, y, "xb", label="input")

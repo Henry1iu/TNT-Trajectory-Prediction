@@ -53,6 +53,8 @@ class TNTLoss(nn.Module):
                  lambda1,
                  lambda2,
                  lambda3,
+                 m,
+                 k,
                  temper=0.01,
                  aux_loss=False,
                  reduction='sum',
@@ -67,6 +69,10 @@ class TNTLoss(nn.Module):
         self.lambda1 = lambda1
         self.lambda2 = lambda2
         self.lambda3 = lambda3
+
+        self.m = m
+        self.k = k
+
         self.aux_loss = aux_loss
         self.reduction = reduction
         self.temper = temper
@@ -94,7 +100,7 @@ class TNTLoss(nn.Module):
         loss = 0.0
 
         # compute target prediction loss
-        weight = torch.tensor([1.0, 2.0], dtype=torch.float, device=self.device)
+        # weight = torch.tensor([1.0, 2.0], dtype=torch.float, device=self.device)
         # cls_loss = F.cross_entropy(
         #     pred_dict['target_prob'].transpose(1, 2),
         #     gt_dict['target_prob'].long(),
@@ -102,19 +108,22 @@ class TNTLoss(nn.Module):
         #     reduction='sum')
         # cls_loss = F.binary_cross_entropy_with_logits(
         cls_loss = F.binary_cross_entropy(
-            pred_dict['target_prob'], gt_dict['target_prob'].float(), reduction='sum')
+            pred_dict['target_prob'], gt_dict['target_prob'].float(), reduction='none')
         offset = pred_dict['offset'][gt_dict['target_prob'].bool()]
-        offset_loss = F.smooth_l1_loss(offset, gt_dict['offset'], reduction='sum')
+
+        cls_loss, indices = torch.topk(cls_loss, self.m, dim=1)    # largest 50
+        cls_loss = cls_loss.sum(1).mean()
+        offset_loss = F.smooth_l1_loss(offset, gt_dict['offset'], reduction='sum') / batch_size
         # loss += self.lambda1 * (cls_loss + offset_loss) / (1.0 if self.reduction == "sum" else batch_size)
         loss += self.lambda1 * (cls_loss + offset_loss)
 
         # compute motion estimation loss
-        reg_loss = F.smooth_l1_loss(pred_dict['traj_with_gt'].squeeze(1), gt_dict['y'], reduction='sum')
+        reg_loss = F.smooth_l1_loss(pred_dict['traj_with_gt'].squeeze(1), gt_dict['y'], reduction='mean')
         loss += self.lambda2 * reg_loss
 
         # compute scoring gt and loss
         score_gt = F.softmax(-distance_metric(pred_dict['traj'], gt_dict['y'])/self.temper, dim=-1)
-        score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt))
+        score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt)) / batch_size
         loss += self.lambda3 * score_loss
 
         loss_dict = {"tar_cls_loss": cls_loss, "tar_offset_loss": offset_loss, "traj_loss": reg_loss, "score_loss": score_loss}

@@ -74,7 +74,9 @@ class TNT(nn.Module):
 
         self.device = device
         self.criterion = TNTLoss(
-            self.lambda1, self.lambda2, self.lambda3, temperature, aux_loss=self.with_aux, device=self.device
+            self.lambda1, self.lambda2, self.lambda3,
+            self.m, self.k,
+            temperature, aux_loss=self.with_aux, device=self.device
         )
 
         # feature extraction backbone
@@ -252,7 +254,7 @@ class TNT(nn.Module):
 
 if __name__ == "__main__":
     batch_size = 32
-    DATA_DIR = "../../dataset/interm_tnt_n_s_0804_small"
+    DATA_DIR = "../../dataset/interm_data_small"
     # DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
     TRAIN_DIR = os.path.join(DATA_DIR, 'train_intermediate')
     # TRAIN_DIR = os.path.join(DATA_DIR, 'val_intermediate')
