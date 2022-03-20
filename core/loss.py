@@ -1,5 +1,7 @@
 # loss function for train the vector net
+import os.path as osp
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -106,25 +108,44 @@ class TNTLoss(nn.Module):
         #     gt_dict['target_prob'].long(),
         #     weight=weight,
         #     reduction='sum')
+
+        flag = torch.logical_or(pred_dict['target_prob'] < 0, pred_dict['target_prob'] > 1)
+        if torch.any(flag):
+            print("[DEBUG] Bad prediction in target point prediction!")
+
         # cls_loss = F.binary_cross_entropy_with_logits(
         cls_loss = F.binary_cross_entropy(
             pred_dict['target_prob'], gt_dict['target_prob'].float(), reduction='none')
-        offset = pred_dict['offset'][gt_dict['target_prob'].bool()]
+
+        if torch.any(torch.isnan(cls_loss)):
+            print(pred_dict['target_prob'].detach().cpu().numpy())
+
+        gt_idx = gt_dict['target_prob'].nonzero()
+        offset = pred_dict['offset'][gt_idx[:, 0], gt_idx[:, 1]]
 
         cls_loss, indices = torch.topk(cls_loss, self.m, dim=1)    # largest 50
-        cls_loss = cls_loss.sum(1).mean()
-        offset_loss = F.smooth_l1_loss(offset, gt_dict['offset'], reduction='sum') / batch_size
+        cls_loss = cls_loss.sum()
+        offset_loss = F.smooth_l1_loss(offset, gt_dict['offset'], reduction='sum')
         # loss += self.lambda1 * (cls_loss + offset_loss) / (1.0 if self.reduction == "sum" else batch_size)
         loss += self.lambda1 * (cls_loss + offset_loss)
 
         # compute motion estimation loss
-        reg_loss = F.smooth_l1_loss(pred_dict['traj_with_gt'].squeeze(1), gt_dict['y'], reduction='mean')
+        reg_loss = F.smooth_l1_loss(pred_dict['traj_with_gt'].squeeze(1), gt_dict['y'], reduction='sum')
         loss += self.lambda2 * reg_loss
 
         # compute scoring gt and loss
-        score_gt = F.softmax(-distance_metric(pred_dict['traj'], gt_dict['y'])/self.temper, dim=-1)
-        score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt)) / batch_size
+        score_gt = F.softmax(-distance_metric(pred_dict['traj'], gt_dict['y'])/self.temper, dim=-1).detach()
+        # score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt)) / batch_size
+        score_loss = F.binary_cross_entropy(pred_dict['score'], score_gt, reduction='sum')
         loss += self.lambda3 * score_loss
+
+        if torch.isnan(score_loss):
+            path = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition"
+
+            print("[DEBUG] Loss is Nan!!!!")
+            np.save(osp.join(path, "score_gt.pkl"), score_gt.detach().cpu().numpy())
+            np.save(osp.join(path, "score_pred.pkl"), pred_dict['score'].detach().cpu().numpy())
+            print(torch.any(torch.isnan(torch.mul(- torch.log(pred_dict['score']), score_gt))))
 
         loss_dict = {"tar_cls_loss": cls_loss, "tar_offset_loss": offset_loss, "traj_loss": reg_loss, "score_loss": score_loss}
         if self.aux_loss:
