@@ -7,7 +7,8 @@ import json
 
 import torch
 
-# from torch.utils.data import DataLoader,
+import torch.distributed as dist
+from torch.utils.data import distributed
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import DataLoader, DataListLoader
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
@@ -32,29 +33,39 @@ class Trainer(object):
                  warmup_epoch=5,
                  with_cuda: bool = False,
                  cuda_device=None,
+                 multi_gpu: bool = False,
                  enable_log: bool = False,
                  log_freq: int = 2,
                  save_folder: str = "",
                  verbose: bool = True
                  ):
         """
-        :param train_loader: train dataset
-        :param eval_loader: eval dataset
-        :param test_loader: dataset
+        :param trainset: train dataset
+        :param evalset: eval dataset
+        :param testset: dataset
+        :param loader: data loader
         :param lr: initial learning rate
         :param betas: Adam optiimzer betas
         :param weight_decay: Adam optimizer weight decay param
-        :param warmup_steps: optimizatioin scheduler param
+        :param warmup_epoch: optimizatioin scheduler param
         :param with_cuda: tag indicating whether using gpu for training
-        :param multi_gpu: tag indicating whether multiple gpus are using
+        :param cuda_device: tag indicating whether multiple gpus are using
         :param log_freq: logging frequency in epoch
         :param verbose: whether printing debug messages
         """
         # determine cuda device id
-        self.cuda_id = cuda_device if with_cuda and cuda_device else [0]
-        self.device = torch.device("cuda:{}".format(self.cuda_id[0]) if torch.cuda.is_available() and with_cuda else "cpu")
-        self.multi_gpu = False if len(self.cuda_id) == 1 else True
+        self.cuda_id = cuda_device if with_cuda and cuda_device else 0
+        self.device = torch.device("cuda:{}".format(self.cuda_id) if torch.cuda.is_available() and with_cuda else "cpu")
+        torch.backends.cudnn.benchmark = True if torch.cuda.is_available() and with_cuda else False     # boost cudnn
+        if 'WORLD_SIZE' in os.environ and multi_gpu:
+            self.multi_gpu = True if int(os.environ['WORLD_SIZE']) > 1 else False
+        else:
+            self.multi_gpu = False
 
+        torch.manual_seed(self.cuda_id)
+        if self.multi_gpu:
+            torch.cuda.set_device(self.cuda_id)
+            dist.init_process_group(backend='nccl', init_method='env://')
 
         # dataset
         self.trainset = trainset
@@ -65,17 +76,48 @@ class Trainer(object):
         self.loader = loader
         # print("[Debug]: using {} to load data".format(self.loader))
 
-        self.train_loader = self.loader(
-            self.trainset,
-            batch_size=self.batch_size,
-            # num_workers=num_workers,
-            # pin_memory=True,
-            shuffle=True
-        )
-        # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers)
-        self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size)
-        # self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=num_workers)
-        self.test_loader = self.loader(self.testset, batch_size=self.batch_size)
+        if self.multi_gpu:
+            # datset sampler when training with distributed data parallel model
+            self.train_sampler = distributed.DistributedSampler(
+                self.trainset,
+                num_replicas=int(os.environ['WORLD_SIZE']),
+                rank=self.cuda_id
+            )
+            self.eval_sampler = distributed.DistributedSampler(
+                self.evalset,
+                num_replicas=int(os.environ['WORLD_SIZE']),
+                rank=self.cuda_id
+            )
+            self.test_sampler = distributed.DistributedSampler(
+                self.testset,
+                num_replicas=int(os.environ['WORLD_SIZE']),
+                rank=self.cuda_id
+            )
+
+            self.train_loader = self.loader(
+                self.trainset,
+                batch_size=self.batch_size,
+                num_workers=0,
+                pin_memory=True,
+                shuffle=False,
+                sampler=self.train_sampler
+            )
+            self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=0, sampler=self.eval_sampler)
+            # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size)
+            self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=0, sampler=self.test_sampler)
+            # self.test_loader = self.loader(self.testset, batch_size=self.batch_size)
+        else:
+            self.train_loader = self.loader(
+                self.trainset,
+                batch_size=self.batch_size,
+                num_workers=num_workers,
+                pin_memory=True,
+                shuffle=True
+            )
+            self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size, num_workers=num_workers)
+            # self.eval_loader = self.loader(self.evalset, batch_size=self.batch_size)
+            self.test_loader = self.loader(self.testset, batch_size=self.batch_size, num_workers=num_workers)
+            # self.test_loader = self.loader(self.testset, batch_size=self.batch_size)
 
         # model
         self.model = None
@@ -96,7 +138,8 @@ class Trainer(object):
         # log
         self.enable_log = enable_log
         self.save_folder = save_folder
-        self.logger = SummaryWriter(log_dir=os.path.join(self.save_folder, "log"))
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            self.logger = SummaryWriter(log_dir=os.path.join(self.save_folder, "log"))
         self.log_freq = log_freq
         self.verbose = verbose
 
@@ -134,6 +177,9 @@ class Trainer(object):
         :param loss: float, the loss of current saving state
         :return:
         """
+        if self.multi_gpu and self.cuda_id != 0:
+            return
+
         self.min_eval_loss = loss
         if not os.path.exists(self.save_folder):
             os.makedirs(self.save_folder, exist_ok=True)
@@ -153,6 +199,9 @@ class Trainer(object):
         :param prefix: str, the prefix to the model file
         :return:
         """
+        if self.multi_gpu and self.cuda_id != 0:
+            return
+
         if not os.path.exists(self.save_folder):
             os.makedirs(self.save_folder, exist_ok=True)
 
@@ -222,8 +271,8 @@ class Trainer(object):
 
         # k = self.model.k if not self.multi_gpu else self.model.module.k
         # horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
-        k = self.model.k
-        horizon = self.model.horizon
+        k = self.model.k if not self.multi_gpu else self.model.module.k
+        horizon = self.model.horizon if not self.multi_gpu else self.model.module.horizon
 
         self.model.eval()
         with torch.no_grad():
@@ -233,8 +282,8 @@ class Trainer(object):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    # out = self.model.module(data.to(self.device))
-                    out = self.model.inference(data.to(self.device))
+                    out = self.model.module.inference(data.to(self.device))
+                    # out = self.model(data.to(self.device))
                 else:
                     out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)

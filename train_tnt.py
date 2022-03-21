@@ -12,7 +12,7 @@ from core.trainer.tnt_trainer import TNTTrainer
 sys.path.append("core/dataloader")
 
 
-def train(args):
+def train(gpu, args):
     """
     script to train the tnt
     :param args:
@@ -24,10 +24,11 @@ def train(args):
     # init output dir
     time_stamp = datetime.now().strftime("%m-%d-%H-%M")
     output_dir = pjoin(args.output_dir, time_stamp)
-    if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
-        raise Exception("The output folder does exists and is not empty! Check the folder.")
-    else:
-        os.makedirs(output_dir)
+    if not args.multi_gpu or (args.multi_gpu and gpu == 0):
+        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+            raise Exception("The output folder does exists and is not empty! Check the folder.")
+        else:
+            os.makedirs(output_dir)
 
     # init trainer
     trainer = TNTTrainer(
@@ -45,7 +46,8 @@ def train(args):
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
-        cuda_device=args.cuda_device,
+        cuda_device=gpu,
+        multi_gpu=args.multi_gpu,
         save_folder=output_dir,
         log_freq=args.log_freq,
         ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
@@ -95,16 +97,17 @@ if __name__ == "__main__":
 
     parser.add_argument("-c", "--with_cuda", action="store_true", default=False,
                         help="training with CUDA: true, or false")
-    # parser.add_argument("-cd", "--cuda_device", type=int, default=[1, 0], nargs='+',
-    #                     help="CUDA device ids")
-    parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
-                        help="CUDA device ids")
+    parser.add_argument("-m", "--multi_gpu", action="store_true", default=False,
+                        help="training with distributed data parallel: true, or false")
+    parser.add_argument("-r", "--local_rank", default=0, type=int,
+                        help="the default id of gpu")
+
     parser.add_argument("--log_freq", type=int, default=2,
                         help="printing loss every n iter: setting n")
     # parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
-    parser.add_argument("--lr", type=float, default=3e-3, help="learning rate of adam")
-    parser.add_argument("-we", "--warmup_epoch", type=int, default=20,
+    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
+    parser.add_argument("-we", "--warmup_epoch", type=int, default=30,
                         help="the number of warmup epoch with initial learning rate, after the learning rate decays")
     parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
                         help="learning rate decay frequency for lr scheduler")
@@ -119,4 +122,4 @@ if __name__ == "__main__":
                         help="resume a model state for fine-tune")
 
     args = parser.parse_args()
-    train(args)
+    train(args.local_rank, args)

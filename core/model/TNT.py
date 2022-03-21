@@ -37,8 +37,8 @@ class TNT(nn.Module):
                  lambda1=0.1,
                  lambda2=1.0,
                  lambda3=0.1,
-                 device=torch.device("cpu"),
-                 multi_gpu: bool = False):
+                 device=torch.device("cpu")
+                 ):
         """
         TNT algorithm for trajectory prediction
         :param in_channels: int, the number of channels of the input node features
@@ -74,7 +74,9 @@ class TNT(nn.Module):
 
         self.device = device
         self.criterion = TNTLoss(
-            self.lambda1, self.lambda2, self.lambda3, temperature, aux_loss=self.with_aux, device=self.device
+            self.lambda1, self.lambda2, self.lambda3,
+            self.m, self.k, temperature,
+            aux_loss=self.with_aux, device=self.device
         )
 
         # feature extraction backbone
