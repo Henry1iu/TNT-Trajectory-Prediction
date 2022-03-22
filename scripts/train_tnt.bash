@@ -5,4 +5,5 @@
 # python train_tnt.py -d dataset/interm_data -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0010 -luf 10 -ldr 0.1
 
 # for test the program on the small dataset
-python train_tnt.py -d dataset/interm_data_small -o run/tnt/ -a -b 64 -c -cd 1 0 --lr 0.0010 -luf 10 -ldr 0.1
+# python train_tnt.py -d dataset/interm_data_small -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.0010 -luf 10 -ldr 0.1
+python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data_small -o run/tnt/ -a -b 128 -c -cd 1 0 --lr 0.0010 -luf 10 -ldr 0.1

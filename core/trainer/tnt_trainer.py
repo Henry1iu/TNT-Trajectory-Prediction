@@ -35,7 +35,7 @@ class TNTTrainer(Trainer):
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=20,
+                 warmup_epoch=30,
                  lr_update_freq=5,
                  lr_decay_rate=0.3,
                  aux_loss: bool = False,

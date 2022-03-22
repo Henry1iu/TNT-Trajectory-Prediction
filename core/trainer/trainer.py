@@ -30,7 +30,7 @@ class Trainer(object):
                  lr: float = 1e-4,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=5,
+                 warmup_epoch=30,
                  with_cuda: bool = False,
                  cuda_device=None,
                  multi_gpu: bool = False,
