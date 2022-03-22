@@ -123,7 +123,7 @@ class TNT(nn.Module):
                         "score":        the predicted score for each predicted trajectory,
                      }
         """
-        n = data.candidate_len_max[0]
+        n = int(data.candidate_len_max[0].cpu().numpy())
 
         target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()

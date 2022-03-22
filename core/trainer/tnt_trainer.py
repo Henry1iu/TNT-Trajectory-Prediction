@@ -155,7 +155,17 @@ class TNTTrainer(Trainer):
 
                 if self.multi_gpu:
                     # loss, loss_dict = self.model.module.loss(data)
-                    loss, loss_dict = self.model.loss(data)
+                    # loss, loss_dict = self.model.loss(data)
+                    n = data.candidate_len_max[0]
+                    pred, aux_out, aux_gt = self.model(data)
+
+                    gt = {
+                        "target_prob": data.candidate_gt.view(-1, n),
+                        "offset": data.offset_gt.view(-1, 2),
+                        "y": data.y.view(-1, self.horizon * 2)
+                    }
+
+                    loss, loss_dict = self.model.criterion(pred, gt, aux_out, aux_gt)
                     with amp.scale_loss(loss, self.optim) as scaled_loss:
                         scaled_loss.backward()
 
