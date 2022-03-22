@@ -18,6 +18,7 @@ from core.trainer.trainer import Trainer
 from core.model.TNT import TNT
 from core.optim_schedule import ScheduledOptim
 from core.util.viz_utils import show_pred_and_gt
+from core.loss import TNTLoss
 
 
 class TNTTrainer(Trainer):
@@ -99,6 +100,13 @@ class TNTTrainer(Trainer):
             with_aux=aux_loss,
             device=self.device
         )
+        self.criterion = TNTLoss(
+            self.model.lambda1, self.model.lambda2, self.model.lambda3,
+            self.model.m, self.model.k, 0.01,
+            aux_loss=self.model.with_aux,
+            device=self.device
+        )
+
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(
@@ -154,8 +162,6 @@ class TNTTrainer(Trainer):
                 self.optm_schedule.zero_grad()
 
                 if self.multi_gpu:
-                    # loss, loss_dict = self.model.module.loss(data)
-                    # loss, loss_dict = self.model.loss(data)
                     n = data.candidate_len_max[0]
                     pred, aux_out, aux_gt = self.model(data)
 
@@ -165,7 +171,7 @@ class TNTTrainer(Trainer):
                         "y": data.y.view(-1, self.horizon * 2)
                     }
 
-                    loss, loss_dict = self.model.criterion(pred, gt, aux_out, aux_gt)
+                    loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
                     with amp.scale_loss(loss, self.optim) as scaled_loss:
                         scaled_loss.backward()
 
@@ -190,8 +196,16 @@ class TNTTrainer(Trainer):
             else:
                 with torch.no_grad():
                     if self.multi_gpu:
-                        # loss, loss_dict = self.model.module.loss(data.to(self.device))
-                        loss, loss_dict = self.model.loss(data)
+                        n = data.candidate_len_max[0]
+                        pred, aux_out, aux_gt = self.model(data)
+
+                        gt = {
+                            "target_prob": data.candidate_gt.view(-1, n),
+                            "offset": data.offset_gt.view(-1, 2),
+                            "y": data.y.view(-1, self.horizon * 2)
+                        }
+
+                        loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
                     else:
                         loss, loss_dict = self.model.loss(data)
 
