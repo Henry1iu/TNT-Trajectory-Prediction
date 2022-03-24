@@ -84,7 +84,7 @@ class SelfAttentionFCLayer(nn.Module):
             # Fill masked elements with a large negative, whose exp is 0
             mask = torch.zeros_like(X, dtype=torch.bool)
             for batch_id, cnt in enumerate(valid_len):
-                cnt = int(cnt.cpu().detach().numpy())
+                cnt = int(cnt.detach().cpu().numpy())
                 mask[batch_id, :, cnt:] = True
                 mask[batch_id, cnt:] = True
             X_masked = X.masked_fill(mask, -1e12)
