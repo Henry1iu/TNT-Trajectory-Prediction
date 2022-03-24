@@ -146,10 +146,6 @@ class ArgoversePreprocessor(Preprocessor):
 
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0:self.obs_horizon].copy().astype(np.float32)
-        # displacement = np.sqrt((agt_traj_obs[0, 0] - agt_traj_obs[-1, 0]) ** 2 + (agt_traj_obs[0, 1] - agt_traj_obs[-1, 1]) ** 2)
-        # if displacement < 20.0:
-        #     return None
-
         agt_traj_fut = data['trajs'][0][self.obs_horizon:(self.obs_horizon+self.pred_horizon)].copy().astype(np.float32)
         ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
 
