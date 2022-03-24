@@ -27,7 +27,7 @@ class ScheduledOptim:
         self._optimizer.zero_grad()
 
     def _get_lr_scale(self):
-        return np.power(self.decay_rate, max((self.n_current_steps - self.n_warmup_epoch) // self.update_rate + 1, 0))
+        return np.power(self.decay_rate, max((self.n_current_steps - self.n_warmup_epoch + 1) // self.update_rate + 1, 0))
 
     def _update_learning_rate(self):
         """ Learning rate scheduling per step """

@@ -227,7 +227,7 @@ class TNTTrainer(Trainer):
         if training:
             if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
                 learning_rate = self.optm_schedule.step_and_update_lr()
-                self.write_log("LR", learning_rate, epoch)
+                self.write_log("LR", learning_rate, epoch + 1)
 
         return avg_loss / num_sample
 
