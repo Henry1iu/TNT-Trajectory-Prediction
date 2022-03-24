@@ -124,8 +124,9 @@ class TNTLoss(nn.Module):
         loss += self.lambda2 * reg_loss
 
         # compute scoring gt and loss
-        score_gt = F.softmax(-distance_metric(pred_dict['traj'], gt_dict['y'])/self.temper, dim=-1)
-        score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt)) / batch_size
+        score_gt = F.softmax(-distance_metric(pred_dict['traj'], gt_dict['y'])/self.temper, dim=-1).detach()
+        # score_loss = torch.sum(torch.mul(- torch.log(pred_dict['score']), score_gt)) / batch_size
+        score_loss = F.binary_cross_entropy(pred_dict['score'], score_gt, reduction='sum') / batch_size
         loss += self.lambda3 * score_loss
 
         loss_dict = {"tar_cls_loss": cls_loss, "tar_offset_loss": offset_loss, "traj_loss": reg_loss, "score_loss": score_loss}
