@@ -27,7 +27,12 @@ The best performance achieved by our implementation and reported in the papers.
 This implementation has been tested on Ubuntu 18.04 and has the following requirements:
 * python == 3.8.8
 * pytorch == 1.8.1
-* torch-geometric == 1.7.2
+* torch-geometric == 1.7.2 (The version of related libraries are listed as follows.)
+  * pytorch-cluster == 1.5.9          
+  * pytorch-geometric == 1.7.2           
+  * pytorch-scatter == 2.0.7           
+  * pytorch-sparse == 0.6.10         
+  * pytorch-spline-conv == 1.2.1
 * pandas == 1.0.0
 * tqdm == 4.60.0
 * tensorboard
