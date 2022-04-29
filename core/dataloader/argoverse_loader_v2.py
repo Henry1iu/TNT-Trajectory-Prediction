@@ -381,9 +381,7 @@ class ArgoverseInDisk(Dataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_small"
-    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_tnt_n_s_0804"
-    # INTERMEDIATE_DATA_DIR = "/media/Data/autonomous_driving/Argoverse/intermediate"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
 
     for folder in ["train", "val", "test"]:
     # for folder in ["test"]:
@@ -391,7 +389,7 @@ if __name__ == "__main__":
 
         # dataset = Argoverse(dataset_input_path)
         dataset = ArgoverseInMem(dataset_input_path).shuffle()
-        batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=True)
+        batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=False)
         for k in range(1):
             for i, data in enumerate(tqdm(batch_iter, total=len(batch_iter), bar_format="{l_bar}{r_bar}")):
                 pass
@@ -409,4 +407,3 @@ if __name__ == "__main__":
             # # print("type: {}".format(type(candit_gt)))
             # print("max: {}".format(candit_gt.max()))
             # print("min: {}".format(candit_gt.min()))
-

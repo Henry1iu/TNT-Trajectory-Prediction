@@ -5,8 +5,8 @@ from datetime import datetime
 
 import argparse
 
-from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
-from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2
+# from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
+from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2, GraphData
 from core.trainer.tnt_trainer import TNTTrainer
 
 sys.path.append("core/dataloader")

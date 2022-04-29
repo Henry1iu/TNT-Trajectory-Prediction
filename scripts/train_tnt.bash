@@ -9,4 +9,4 @@
 
 # for multi-gpu training
 # nproc_per_node: set the number of gpu
-python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data_ns -o run/tnt/ -a -b 128 -c -m --lr 0.0010 -luf 10 -ldr 0.5
+python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data_2022 -o run/tnt/ -a -b 128 -c -m --lr 0.0012 -luf 10 -ldr 0.3
