@@ -58,7 +58,7 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-d", "--data_root", type=str, default="dataset/interm_data_small",
+    parser.add_argument("-r", "--data_root", type=str, default="dataset/interm_data_small",
                         help="root dir for datasets")
     parser.add_argument("-s", "--split", type=str, default="test")
 
