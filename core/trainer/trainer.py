@@ -185,8 +185,8 @@ class Trainer(object):
             os.makedirs(self.save_folder, exist_ok=True)
         torch.save({
             "epoch": iter_epoch,
-            # "model_state_dict": self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
-            "model_state_dict": self.model.state_dict(),
+            "model_state_dict": self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            # "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optim.state_dict(),
             "min_eval_loss": loss
         }, os.path.join(self.save_folder, "checkpoint_iter{}.ckpt".format(iter_epoch)))
@@ -223,8 +223,8 @@ class Trainer(object):
 
         # save model
         torch.save(
-            # self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
-            self.model.state_dict(),
+            self.model.state_dict() if not self.multi_gpu else self.model.module.state_dict(),
+            # self.model.state_dict(),
             os.path.join(self.save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
         if self.verbose:
