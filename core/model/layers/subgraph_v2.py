@@ -44,6 +44,8 @@ class SubGraph(nn.Module):
             sub_data (Data): [x, y, cluster, edge_index, valid_len]
         """
         x = sub_data.x
+        sub_data.cluster = sub_data.cluster.long()
+        sub_data.edge_index = sub_data.edge_index.long()
 
         for name, layer in self.layer_seq.named_modules():
             if isinstance(layer, MLP):

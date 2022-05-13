@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -10,15 +11,19 @@ from torch_geometric.nn import DataParallel
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 from argoverse.evaluation.competition_util import generate_forecasting_h5
 
+from apex import amp
+from apex.parallel import DistributedDataParallel
+
 from core.trainer.trainer import Trainer
 from core.model.TNT import TNT
 from core.optim_schedule import ScheduledOptim
 from core.util.viz_utils import show_pred_and_gt
+from core.loss import TNTLoss
 
 
 class TNTTrainer(Trainer):
     """
-    VectorNetTrainer, train the vectornet with specified hyperparameters and configurations
+    TNT Trainer, train the TNT with specified hyperparameters and configurations
     """
     def __init__(self,
                  trainset,
@@ -31,12 +36,13 @@ class TNTTrainer(Trainer):
                  lr: float = 1e-3,
                  betas=(0.9, 0.999),
                  weight_decay: float = 0.01,
-                 warmup_epoch=20,
+                 warmup_epoch=30,
                  lr_update_freq=5,
                  lr_decay_rate=0.3,
                  aux_loss: bool = False,
                  with_cuda: bool = False,
                  cuda_device=None,
+                 multi_gpu=False,
                  enable_log=True,
                  log_freq: int = 2,
                  save_folder: str = "",
@@ -45,15 +51,16 @@ class TNTTrainer(Trainer):
                  verbose: bool = True
                  ):
         """
-        trainer class for vectornet
-        :param train_loader: see parent class
-        :param eval_loader: see parent class
-        :param test_loader: see parent class
+        trainer class for tnt
+        :param trainset: see parent class
+        :param evalset: see parent class
+        :param testset: see parent class
         :param lr: see parent class
         :param betas: see parent class
         :param weight_decay: see parent class
         :param warmup_steps: see parent class
         :param with_cuda: see parent class
+        :param cuda_device: see parent class
         :param multi_gpu: see parent class
         :param log_freq: see parent class
         :param model_path: str, the path to a trained model
@@ -72,6 +79,7 @@ class TNTTrainer(Trainer):
             warmup_epoch=warmup_epoch,
             with_cuda=with_cuda,
             cuda_device=cuda_device,
+            multi_gpu=multi_gpu,
             enable_log=enable_log,
             log_freq=log_freq,
             save_folder=save_folder,
@@ -79,31 +87,25 @@ class TNTTrainer(Trainer):
         )
 
         # init or load model
+        self.horizon = horizon
         self.aux_loss = aux_loss
+
         # input dim: (20, 8); output dim: (30, 2)
         # model_name = VectorNet
         model_name = TNT
         self.model = model_name(
             self.trainset.num_features if hasattr(self.trainset, 'num_features') else self.testset.num_features,
-            horizon,
+            self.horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
-            device=self.device,
-            multi_gpu=self.multi_gpu
+            device=self.device
         )
-
-        # resume from model file or maintain the original
-        if model_path:
-            self.load(model_path, 'm')
-
-        if self.multi_gpu:
-            # self.model = DataParallel(self.model)
-            if self.verbose:
-                print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
-        else:
-            if self.verbose:
-                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
-        self.model = self.model.to(self.device)
+        self.criterion = TNTLoss(
+            self.model.lambda1, self.model.lambda2, self.model.lambda3,
+            self.model.m, self.model.k, 0.01,
+            aux_loss=self.model.with_aux,
+            device=self.device
+        )
 
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
@@ -114,8 +116,24 @@ class TNTTrainer(Trainer):
             update_rate=lr_update_freq,
             decay_rate=lr_decay_rate
         )
+
+        # resume from model file or maintain the original
+        if model_path:
+            self.load(model_path, 'm')
+
+        self.model = self.model.to(self.device)
+        if self.multi_gpu:
+            self.model = DistributedDataParallel(self.model)
+            self.model, self.optimizer = amp.initialize(self.model, self.optim, opt_level="O0")
+            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0)):
+                print("[TNTTrainer]: Train the mode with multiple GPUs: {} GPUs.".format(int(os.environ['WORLD_SIZE'])))
+        else:
+            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0)):
+                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
+
         # record the init learning rate
-        self.write_log("LR", self.lr, 0)
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            self.write_log("LR", self.lr, 0)
 
         # resume training from ckpt
         if ckpt_path:
@@ -138,74 +156,80 @@ class TNTTrainer(Trainer):
 
         for i, data in data_iter:
             n_graph = data.num_graphs
-            # ################################### DEBUG ################################### #
-            # if epoch > 0:
-            #     print("\nsize of x: {};".format(data.x.shape))
-            #     print("size of cluster: {};".format(data.cluster.shape))
-            #     print("valid_len: {};".format(data.valid_len))
-            #     print("time_step_len: {};".format(data.time_step_len))
-            #
-            #     print("size of candidate: {};".format(data.candidate.shape))
-            #     print("size of candidate_mask: {};".format(data.candidate_mask.shape))
-            #     print("candidate_len_max: {};".format(data.candidate_len_max))
-            # ################################### DEBUG ################################### #
+            data = data.to(self.device)
 
             if training:
-                if self.multi_gpu:
-                    # loss, loss_dict = self.model.module.loss(data.to(self.device))
-                    loss, loss_dict = self.model.loss(data.to(self.device))
-                    # loss, loss_dict = self.model.module.loss(data)
-                else:
-                    loss, loss_dict = self.model.loss(data.to(self.device))
-
                 self.optm_schedule.zero_grad()
-                loss.backward()
+
+                if self.multi_gpu:
+                    n = data.candidate_len_max[0]
+                    pred, aux_out, aux_gt = self.model(data)
+
+                    gt = {
+                        "target_prob": data.candidate_gt.view(-1, n),
+                        "offset": data.offset_gt.view(-1, 2),
+                        "y": data.y.view(-1, self.horizon * 2)
+                    }
+
+                    loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
+                    with amp.scale_loss(loss, self.optim) as scaled_loss:
+                        scaled_loss.backward()
+
+                else:
+                    loss, loss_dict = self.model.loss(data)
+                    loss.backward()
+
                 self.optim.step()
 
                 # writing loss
-                self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Cls_Loss",
-                               loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Target_Offset_Loss",
-                               loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Traj_Loss",
-                               loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                self.write_log("Score_Loss",
-                               loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                    self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Target_Cls_Loss",
+                                loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Target_Offset_Loss",
+                                loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Traj_Loss",
+                                loss_dict["traj_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
+                    self.write_log("Score_Loss",
+                                loss_dict["score_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
                     if self.multi_gpu:
-                        # loss, loss_dict = self.model.module.loss(data.to(self.device))
-                        loss, loss_dict = self.model.loss(data.to(self.device))
+                        n = data.candidate_len_max[0]
+                        pred, aux_out, aux_gt = self.model(data)
+
+                        gt = {
+                            "target_prob": data.candidate_gt.view(-1, n),
+                            "offset": data.offset_gt.view(-1, 2),
+                            "y": data.y.view(-1, self.horizon * 2)
+                        }
+
+                        loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
                     else:
-                        loss, loss_dict = self.model.loss(data.to(self.device))
+                        loss, loss_dict = self.model.loss(data)
 
                     # writing loss
-                    self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
-                    # self.write_log("Target_Cls_Loss(Eval)",
-                    #                loss_dict["tar_cls_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    # self.write_log("Target_Offset_Loss(Eval)",
-                    #                loss_dict["tar_offset_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
-                    # self.write_log("Traj_Loss(Eval)",
-                    #                loss_dict["traj_loss"].item() / n_graph, i + epoch * len(dataloader))
-                    # self.write_log("Score_Loss(Eval)",
-                    #                loss_dict["score_loss"].item() / n_graph, i + epoch * len(dataloader))
+                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                        self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
             avg_loss += loss.detach().item()
 
-            desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
-                                                                                 epoch,
-                                                                                 loss.detach().item() / n_graph,
-                                                                                 avg_loss / num_sample)
+            desc_str = "[Info: Device_{}: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format(
+                self.cuda_id,
+                "train" if training else "eval",
+                epoch,
+                loss.detach().item() / n_graph,
+                avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
         if training:
-            learning_rate = self.optm_schedule.step_and_update_lr()
-            self.write_log("LR", learning_rate, epoch)
+            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                learning_rate = self.optm_schedule.step_and_update_lr()
+                self.write_log("LR", learning_rate, epoch + 1)
 
-        return avg_loss
+        return avg_loss / num_sample
 
     def test(self,
              miss_threshold=2.0,

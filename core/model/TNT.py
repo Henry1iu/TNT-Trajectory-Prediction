@@ -37,8 +37,8 @@ class TNT(nn.Module):
                  lambda1=0.1,
                  lambda2=1.0,
                  lambda3=0.1,
-                 device=torch.device("cpu"),
-                 multi_gpu: bool = False):
+                 device=torch.device("cpu")
+                 ):
         """
         TNT algorithm for trajectory prediction
         :param in_channels: int, the number of channels of the input node features
@@ -74,7 +74,9 @@ class TNT(nn.Module):
 
         self.device = device
         self.criterion = TNTLoss(
-            self.lambda1, self.lambda2, self.lambda3, temperature, aux_loss=self.with_aux, device=self.device
+            self.lambda1, self.lambda2, self.lambda3,
+            self.m, self.k, temperature,
+            aux_loss=self.with_aux, device=self.device
         )
 
         # feature extraction backbone
@@ -121,7 +123,7 @@ class TNT(nn.Module):
                         "score":        the predicted score for each predicted trajectory,
                      }
         """
-        n = data.candidate_len_max[0]
+        n = int(data.candidate_len_max[0].cpu().numpy())
 
         target_candidate = data.candidate.view(-1, n, 2)   # [batch_size, N, 2]
         batch_size, _, _ = target_candidate.size()
@@ -220,21 +222,22 @@ class TNT(nn.Module):
         # re-arrange trajectories according the the descending order of the score
         _, batch_order = score.sort(descending=True)
         traj_pred = torch.cat([traj_in[i, order] for i, order in enumerate(batch_order)], dim=0).view(-1, self.m, self.horizon * 2)
-        traj_selected = traj_pred[:, :self.k]                                   # [batch_size, k, horizon * 2]
+        traj_selected = traj_pred[:, :self.k].clone()                                   # [batch_size, k, horizon * 2]
 
         # check the distance between them, NMS, stop only when enough trajs collected
         for batch_id in range(traj_pred.shape[0]):                              # one batch for a time
             traj_cnt = 1
+            thres = threshold
             while traj_cnt < self.k:
                 for j in range(1, self.m):
                     dis = distance_metric(traj_selected[batch_id, :traj_cnt], traj_pred[batch_id, j].unsqueeze(0))
-                    if not torch.any(dis < threshold):
-                        traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, j]
+                    if not torch.any(dis < thres):
+                        traj_selected[batch_id, traj_cnt] = traj_pred[batch_id, j].clone()
 
                         traj_cnt += 1
                     if traj_cnt >= self.k:
                         break
-                threshold /= 2.0
+                thres /= 2.0
 
         return traj_selected
 

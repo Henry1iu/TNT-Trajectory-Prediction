@@ -1,10 +1,16 @@
+import os
 from tqdm import tqdm
 
 import torch
 import torch.nn as nn
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch_geometric.data import DataLoader
 from torch_geometric.nn import DataParallel
+from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
+from argoverse.evaluation.competition_util import generate_forecasting_h5
+
+from apex import amp
+from apex.parallel import DistributedDataParallel
 
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
@@ -32,6 +38,7 @@ class VectorNetTrainer(Trainer):
                  aux_loss: bool = False,
                  with_cuda: bool = False,
                  cuda_device=None,
+                 multi_gpu=False,
                  log_freq: int = 2,
                  save_folder: str = "",
                  model_path: str = None,
@@ -66,39 +73,29 @@ class VectorNetTrainer(Trainer):
             warmup_epoch=warmup_epoch,
             with_cuda=with_cuda,
             cuda_device=cuda_device,
+            multi_gpu=multi_gpu,
             log_freq=log_freq,
             save_folder=save_folder,
             verbose=verbose
         )
 
         # init or load model
+        self.horizon = horizon
         self.aux_loss = aux_loss
+
         # input dim: (20, 8); output dim: (30, 2)
         model_name = VectorNet
         # model_name = OriginalVectorNet
         self.model = model_name(
             self.trainset.num_features,
-            horizon,
+            self.horizon,
             num_global_graph_layer=num_global_graph_layer,
             with_aux=aux_loss,
             device=self.device
         )
 
-        # resume from model file or maintain the original
-        if model_path:
-            self.load(model_path, 'm')
-
-        if self.multi_gpu:
-            # self.model = DataParallel(self.model)
-            if self.verbose:
-                print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
-        else:
-            if self.verbose:
-                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
-        self.model = self.model.to(self.device)
-
         # init optimizer
-        self.optim = Adam(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
+        self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
         self.optm_schedule = ScheduledOptim(
             self.optim,
             self.lr,
@@ -106,6 +103,24 @@ class VectorNetTrainer(Trainer):
             update_rate=lr_update_freq,
             decay_rate=lr_decay_rate
         )
+
+        # resume from model file or maintain the original
+        if model_path:
+            self.load(model_path, 'm')
+
+        self.model = self.model.to(self.device)
+        if self.multi_gpu:
+            self.model = DistributedDataParallel(self.model)
+            self.model, self.optimizer = amp.initialize(self.model, self.optim, opt_level="O0")
+            if self.verbose:
+                print("[TNTTrainer]: Train the mode with multiple GPUs: {}.".format(self.cuda_id))
+        else:
+            if self.verbose:
+                print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
+
+        # record the init learning rate
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            self.write_log("LR", self.lr, 0)
 
         # load ckpt
         if ckpt_path:
@@ -128,40 +143,51 @@ class VectorNetTrainer(Trainer):
 
         for i, data in data_iter:
             n_graph = data.num_graphs
+            data = data.to(self.device)
+
             if training:
+                self.optm_schedule.zero_grad()
+
                 if self.multi_gpu:
                     # loss = self.model.module.loss(data.to(self.device))
-                    loss = self.model.loss(data.to(self.device))
+                    loss = self.model.loss(data)
+                    with amp.scale_loss(loss, self.optim) as scaled_loss:
+                        scaled_loss.backward()
                 else:
-                    loss = self.model.loss(data.to(self.device))
+                    loss = self.model.loss(data)
+                    loss.backward()
 
-                self.optm_schedule.zero_grad()
-                loss.backward()
                 self.optim.step()
-                self.write_log("Train Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
+                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                    self.write_log("Train Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
                     if self.multi_gpu:
                         # loss = self.model.module.loss(data.to(self.device))
-                        loss = self.model.loss(data.to(self.device))
+                        loss = self.model.loss(data)
                     else:
-                        loss = self.model.loss(data.to(self.device))
-                    self.write_log("Eval Loss", loss.item() / n_graph, i + epoch * len(dataloader))
+                        loss = self.model.loss(data)
+
+                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                        self.write_log("Eval Loss", loss.item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
             avg_loss += loss.detach().item()
 
             # print log info
-            desc_str = "[Info: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format("train" if training else "eval",
-                                                                                 epoch,
-                                                                                 loss.item() / n_graph,
-                                                                                 avg_loss / num_sample)
+            desc_str = "[Info: Device_{}: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}]".format(
+                self.cuda_id,
+                "train" if training else "eval",
+                epoch,
+                loss.item() / n_graph,
+                avg_loss / num_sample)
             data_iter.set_description(desc=desc_str, refresh=True)
 
         if training:
-            learning_rate = self.optm_schedule.step_and_update_lr()
-            self.write_log("LR", learning_rate, epoch)
+            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                learning_rate = self.optm_schedule.step_and_update_lr()
+                self.write_log("LR", learning_rate, epoch)
 
         return avg_loss / num_sample
 

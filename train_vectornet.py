@@ -5,29 +5,56 @@ from datetime import datetime
 
 import argparse
 
-from core.dataloader.argoverse_loader import Argoverse, GraphData
-from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2
+# from torch.utils.data import DataLoader
+from torch_geometric.data import DataLoader
+
+# from core.dataloader.dataset import GraphDataset
+# from core.dataloader.argoverse_loader import Argoverse, GraphData
+from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2, GraphData
 from core.trainer.vectornet_trainer import VectorNetTrainer
+
+TEST = False
 
 sys.path.append("core/dataloader")
 
 
-def train(args):
+def train(n_gpu, args):
     """
     script to train the vectornet
     :param args:
     :return:
     """
+    # data loading
+    # train_set = GraphDataset(pjoin(args.data_root, "train_intermediate")).shuffle()
+    # eval_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+    # test_set = GraphDataset(pjoin(args.data_root, "val_intermediate"))
+
     train_set = ArgoverseInMemv2(pjoin(args.data_root, "train_intermediate")).shuffle()
     eval_set = ArgoverseInMemv2(pjoin(args.data_root, "val_intermediate"))
+
+    # loader = DataLoader
+    # t_loader = loader(train_set[:10] if TEST else train_set,
+    #                   batch_size=args.batch_size,
+    #                   num_workers=args.num_workers,
+    #                   pin_memory=True,
+    #                   shuffle=True)
+    # e_loader = loader(eval_set[:2] if TEST else eval_set,
+    #                   batch_size=args.batch_size,
+    #                   num_workers=args.num_workers,
+    #                   pin_memory=True)
+    # ts_loader = loader(test_set[:1] if TEST else test_set,
+    #                    batch_size=1,
+    #                    num_workers=1,
+    #                    pin_memory=True)
 
     # init output dir
     time_stamp = datetime.now().strftime("%m-%d-%H-%M")
     output_dir = pjoin(args.output_dir, time_stamp)
-    if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
-        raise Exception("The output folder does exists and is not empty! Check the folder.")
-    else:
-        os.makedirs(output_dir)
+    if not args.multi_gpu or (args.multi_gpu and n_gpu == 0):
+        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+            raise Exception("The output folder does exists and is not empty! Check the folder.")
+        else:
+            os.makedirs(output_dir)
 
     # init trainer
     trainer = VectorNetTrainer(
@@ -38,14 +65,15 @@ def train(args):
         num_workers=args.num_workers,
         lr=args.lr,
         warmup_epoch=args.warmup_epoch,
-        lr_update_freq=args.lr_update_freq,
         lr_decay_rate=args.lr_decay_rate,
+        lr_update_freq=args.lr_update_freq,
         weight_decay=args.adam_weight_decay,
         betas=(args.adam_beta1, args.adam_beta2),
         num_global_graph_layer=args.num_glayer,
         aux_loss=args.aux_loss,
         with_cuda=args.with_cuda,
-        cuda_device=args.cuda_device,
+        cuda_device=n_gpu,
+        multi_gpu=args.multi_gpu,
         save_folder=output_dir,
         log_freq=args.log_freq,
         ckpt_path=args.resume_checkpoint if hasattr(args, "resume_checkpoint") and args.resume_checkpoint else None,
@@ -94,18 +122,24 @@ if __name__ == "__main__":
 
     parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=[], nargs='+',
-                        help="CUDA device ids")
+    # parser.add_argument("-cd", "--cuda_device", type=int, nargs='+', default=[],
+    #                     help="CUDA device ids")
+    parser.add_argument("-m", "--multi_gpu", action="store_true", default=False,
+                        help="training with distributed data parallel: true, or false")
+    parser.add_argument("-r", "--local_rank", default=0, type=int,
+                        help="the default id of gpu")
+
     parser.add_argument("--log_freq", type=int, default=2,
                         help="printing loss every n iter: setting n")
     parser.add_argument("--on_memory", type=bool, default=True, help="Loading on memory: true or false")
 
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate of adam")
     parser.add_argument("-we", "--warmup_epoch", type=int, default=20,
-                        help="The epoch to start the learning rate decay")
+                        help="the number of warmup epoch with initial learning rate, after the learning rate decays")
     parser.add_argument("-luf", "--lr_update_freq", type=int, default=5,
                         help="learning rate decay frequency for lr scheduler")
     parser.add_argument("-ldr", "--lr_decay_rate", type=float, default=0.9, help="lr scheduler decay rate")
+
     parser.add_argument("--adam_weight_decay", type=float, default=0.01, help="weight_decay of adam")
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="adam first beta value")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="adam first beta value")
@@ -114,4 +148,4 @@ if __name__ == "__main__":
     parser.add_argument("-rm", "--resume_model", type=str, help="resume a model state for fine-tune")
 
     args = parser.parse_args()
-    train(args)
+    train(args.local_rank, args)
