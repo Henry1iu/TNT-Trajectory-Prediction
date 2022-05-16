@@ -144,7 +144,9 @@ class TNT(nn.Module):
         _, indices = target_prob.topk(self.m, dim=1)
         batch_idx = torch.vstack([torch.arange(0, batch_size, device=self.device) for _ in range(self.m)]).T
         target_pred_se, offset_pred_se = target_candidate[batch_idx, indices], offset[batch_idx, indices]
+
         trajs = self.motion_estimator(target_feat, target_pred_se + offset_pred_se)
+
         score = self.traj_score_layer(target_feat, trajs)
 
         return {
@@ -162,6 +164,8 @@ class TNT(nn.Module):
         :return: loss
         """
         n = data.candidate_len_max[0]
+        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
+
         pred, aux_out, aux_gt = self.forward(data)
 
         gt = {
@@ -211,7 +215,7 @@ class TNT(nn.Module):
         raise NotImplementedError
 
     # todo: determine appropiate threshold
-    def traj_selection(self, traj_in, score, threshold=0.01):
+    def traj_selection(self, traj_in, score, threshold=16):
         """
         select the top k trajectories according to the score and the distance
         :param traj_in: candidate trajectories, [batch, M, horizon * 2]

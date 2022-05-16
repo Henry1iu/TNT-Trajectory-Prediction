@@ -146,10 +146,12 @@ class TNTTrainer(Trainer):
 
         data_iter = tqdm(
             enumerate(dataloader),
-            desc="{}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format("train" if training else "eval",
-                                                                   epoch,
-                                                                   0.0,
-                                                                   avg_loss),
+            desc="Info: Device_{}: {}_Ep_{}: loss: {:.5e}; avg_loss: {:.5e}".format(
+                self.cuda_id,
+                "train" if training else "eval",
+                epoch,
+                0.0,
+                avg_loss),
             total=len(dataloader),
             bar_format="{l_bar}{r_bar}"
         )
@@ -163,6 +165,7 @@ class TNTTrainer(Trainer):
 
                 if self.multi_gpu:
                     n = data.candidate_len_max[0]
+                    data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
                     pred, aux_out, aux_gt = self.model(data)
 
                     gt = {
@@ -197,6 +200,7 @@ class TNTTrainer(Trainer):
                 with torch.no_grad():
                     if self.multi_gpu:
                         n = data.candidate_len_max[0]
+                        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
                         pred, aux_out, aux_gt = self.model(data)
 
                         gt = {
@@ -261,6 +265,7 @@ class TNTTrainer(Trainer):
             for data in tqdm(self.test_loader):
                 batch_size = data.num_graphs
                 gt = data.y.unsqueeze(1).view(batch_size, -1, 2).cumsum(axis=1).numpy()
+
                 origs = data.orig.numpy()
                 rots = data.rot.numpy()
                 seq_ids = data.seq_id.numpy()
