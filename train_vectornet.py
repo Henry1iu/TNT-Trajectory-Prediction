@@ -2,7 +2,7 @@ import os
 import sys
 from os.path import join as pjoin
 from datetime import datetime
-
+import json
 import argparse
 
 # from torch.utils.data import DataLoader
@@ -54,6 +54,10 @@ def train(args):
         raise Exception("The output folder does exists and is not empty! Check the folder.")
     else:
         os.makedirs(output_dir)
+
+        # dump the args
+        with open(pjoin(output_dir, 'config.json'), 'w') as fp:
+            json.dump(vars(args), fp, indent=4, separators=(", ", ": "))
 
     # init trainer
     trainer = VectorNetTrainer(
