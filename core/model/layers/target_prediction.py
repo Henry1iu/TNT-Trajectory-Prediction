@@ -51,9 +51,9 @@ class TargetPred(nn.Module):
         # compute probability for each candidate
         prob_tensor = self.prob_mlp(feat_in_repeat).squeeze(2)
         if not isinstance(candidate_mask, torch.Tensor):
-            tar_candit_prob = F.softmax(prob_tensor, dim=-1)                                    # [batch_size, n_tar, 1]
+            tar_candit_prob = F.softmax(prob_tensor, dim=-1)                                    # [batch_size, n_tar]
         else:
-            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=-1)               # [batch_size, n_tar, 1]
+            tar_candit_prob = masked_softmax(prob_tensor, candidate_mask, dim=-1)               # [batch_size, n_tar]
         tar_offset_mean = self.mean_mlp(feat_in_repeat)                                         # [batch_size, n_tar, 2]
 
         return tar_candit_prob, tar_offset_mean

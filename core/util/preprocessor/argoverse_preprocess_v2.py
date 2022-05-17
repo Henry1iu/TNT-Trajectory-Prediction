@@ -27,6 +27,8 @@ from core.util.cubic_spline import Spline2D
 
 warnings.filterwarnings("ignore")
 
+RESCALE_LENGTH = 1.0    # the rescale length th turn the lane vector into equal distance pieces
+
 
 class ArgoversePreprocessor(Preprocessor):
     def __init__(self,
@@ -139,7 +141,7 @@ class ArgoversePreprocessor(Preprocessor):
         # get the target candidates and candidate gt
         agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
         agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
-        ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'])
+        ctr_line_candts = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'], viz=False)
 
         # rotate the center lines and find the reference center line
         agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
@@ -147,6 +149,9 @@ class ArgoversePreprocessor(Preprocessor):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
 
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
+        if self.normalized and len(tar_candts[tar_candts[:, 1] >= 0, :]) != 0:
+            tar_candts = tar_candts[tar_candts[:, 1] >= 0, :]
+
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
             splines, ref_idx = None, None
@@ -253,6 +258,7 @@ class ArgoversePreprocessor(Preprocessor):
         for lane_id in lane_ids:
             lane = self.am.city_lane_centerlines_dict[data['city']][lane_id]
             lane = copy.deepcopy(lane)
+
             centerline = np.matmul(data['rot'], (lane.centerline - data['orig'].reshape(-1, 2)).T).T
             x, y = centerline[:, 0], centerline[:, 1]
             if x.max() < x_min or x.min() > x_max or y.max() < y_min or y.min() > y_max:
@@ -261,7 +267,12 @@ class ArgoversePreprocessor(Preprocessor):
                 """Getting polygons requires original centerline"""
                 polygon = self.am.get_lane_segment_polygon(lane_id, data['city'])
                 polygon = copy.deepcopy(polygon)
-                lane.centerline = centerline
+
+                # rescale centerines
+                spline_ctr = Spline2D(x, y)
+                s_rescaled = np.arange(0, spline_ctr.s[-1], RESCALE_LENGTH)
+                x_rescaled, y_rescaled = spline_ctr.calc_global_position_online(s_rescaled)
+                lane.centerline = np.stack([x_rescaled, y_rescaled], axis=1)
                 lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
                 lanes[lane_id] = lane
 
@@ -415,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--small", action='store_true', default=False)
     args = parser.parse_args()
 
+    args.root = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet/data/"
     raw_dir = os.path.join(args.root, "raw_data")
     interm_dir = os.path.join(args.dest, "interm_data" if not args.small else "interm_data_small")
 

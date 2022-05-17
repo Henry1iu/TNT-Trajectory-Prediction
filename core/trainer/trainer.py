@@ -287,7 +287,7 @@ class Trainer(object):
                 else:
                     out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)
-                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
+                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cpu().numpy()
 
                 # record the prediction and ground truth
                 for batch_id in range(batch_size):
