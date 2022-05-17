@@ -15,11 +15,11 @@ and
 The best performance achieved by our implementation and reported in the papers. 
 
 | Algorithm | minADE(K=1) |   minFDE(K=1)   | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
-| :-------: |:-----------:|:---------------:|:--------:| :----------:| :---------: | :-------:|
-| VectorNet (Original) |    1.66     |      3.67       |    -     | -           | -           | -        |
-| VectorNet (**Ours**) |    1.49     |      3.25       |  0.561   | -           | -           | -        |
-|  TNT(Original)   |      -      |        -        |    -     | 0.728       | 1.292       | 0.093    |
-|  TNT(**Ours**)   |      -      |        -        |    -     | 1.138       | 2.123       | 0.286    |
+| :-------: |:-----------:|:---------------:|:--------:|:-----------:|:-----------:|:--------:|
+| VectorNet (Original) |    1.66     |      3.67       |    -     |      -      |      -      |    -     |
+| VectorNet (**Ours**) |    1.49     |      3.25       |  0.561   |      -      |      -      |    -     |
+|  TNT(Original)   |      -      |        -        |    -     |    0.728    |    1.292    |  0.093   |
+|  TNT(**Ours**)   |      -      |        -        |    -     |    0.986    |    1.827    |  0.233   |
 
 ## Setup
 
