@@ -14,13 +14,15 @@ and
 ### Achieved Best Performance
 The best performance achieved by our implementation and reported in the papers. 
 
-| Algorithm | minADE(K=1) |   minFDE(K=1)   | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
-| :-------: |:-----------:|:---------------:|:--------:|:-----------:|:-----------:|:--------:|
-| VectorNet (Original) |    1.66     |      3.67       |    -     |      -      |      -      |    -     |
-| VectorNet (**Ours**) |    1.49     |      3.25       |  0.561   |      -      |      -      |    -     |
-|  TNT(Original)   |      -      |        -        |    -     |    0.728    |    1.292    |  0.093   |
-|  TNT(**Ours**)   |      -      |        -        |    -     |    0.986    |    1.827    |  0.233   |
+| Algorithm | minADE(K=1) | minFDE(K=1) | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
+| :-------: |:-----------:|:-----------:|:--------:|:-----------:|:-----------:|:--------:|
+| VectorNet (Original) |    1.66     |    3.67     |    -     |      -      |      -      |    -     |
+| VectorNet (**Ours**) |    1.47     |    3.19     |  0.558   |      -      |      -      |    -     |
+|  TNT(Original)   |      -      |      -      |    -     |    0.728    |    1.292    |  0.093   |
+|  TNT(**Ours**)   |      -      |      -      |    -     |    0.986    |    1.827    |  0.233   |
 
+* [VectorNet Pre-trained Weights](https://mycuhk-my.sharepoint.com/:u:/g/personal/1155071948_link_cuhk_edu_hk/Ee7FZXGwXB9Mh7O7wSHjAlUBH5uB1fP9LEXPP8TS1lSFTQ?e=iWZOF7)
+* [TNT Pre-trained Weights]() (Coming Soon...)
 
 ## Setup
 
