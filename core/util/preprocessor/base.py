@@ -13,6 +13,8 @@ from torch.utils.data import Dataset, DataLoader
 
 from argoverse.utils.mpl_plotting_utils import visualize_centerline
 
+from core.util.cubic_spline import Spline2D
+
 
 class Preprocessor(Dataset):
     """
@@ -113,29 +115,16 @@ class Preprocessor(Dataset):
         return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
 
     # implement a candidate sampling with equal distance;
-    def lane_candidate_sampling(self, centerline_list, distance=0.5, viz=False):
+    def lane_candidate_sampling(self, centerline_list, orig, distance=0.5, viz=False):
         """the input are list of lines, each line containing"""
         candidates = []
-        for line in centerline_list:
-            for i in range(len(line) - 1):
-                if np.any(np.isnan(line[i])) or np.any(np.isnan(line[i+1])):
-                    continue
-                [x_diff, y_diff] = line[i+1] - line[i]
-                if x_diff == 0.0 and y_diff == 0.0:
-                    continue
-                candidates.append(line[i])
-
-                # compute displacement along each coordinate
-                den = np.hypot(x_diff, y_diff) + np.finfo(float).eps
-                d_x = distance * (x_diff / den)
-                d_y = distance * (y_diff / den)
-
-                num_c = np.floor(den / distance).astype(np.int)
-                pt = copy.deepcopy(line[i])
-                for j in range(num_c):
-                    pt += np.array([d_x, d_y])
-                    candidates.append(copy.deepcopy(pt))
-        candidates = np.unique(np.asarray(candidates), axis=0)
+        for lane_id, line in enumerate(centerline_list):
+            sp = Spline2D(x=line[:, 0], y=line[:, 1])
+            s_o, d_o = sp.calc_frenet_position(orig[0], orig[1])
+            s = np.arange(s_o, sp.s[-1], distance)
+            ix, iy = sp.calc_global_position_online(s)
+            candidates.append(np.stack([ix, iy], axis=1))
+        candidates = np.unique(np.concatenate(candidates), axis=0)
 
         if viz:
             fig = plt.figure(0, figsize=(8, 7))
