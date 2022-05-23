@@ -6,6 +6,7 @@ import os
 import argparse
 from os.path import join as pjoin
 import copy
+import sys
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -148,9 +149,7 @@ class ArgoversePreprocessor(Preprocessor):
         for i, _ in enumerate(ctr_line_candts):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
 
-        tar_candts = self.lane_candidate_sampling(ctr_line_candts, viz=False)
-        if self.normalized and len(tar_candts[tar_candts[:, 1] >= 0, :]) != 0:
-            tar_candts = tar_candts[tar_candts[:, 1] >= 0, :]
+        tar_candts = self.lane_candidate_sampling(ctr_line_candts, [0, 0], viz=True)
 
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
@@ -426,7 +425,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--small", action='store_true', default=False)
     args = parser.parse_args()
 
-    args.root = "/Users/jb/projects/trajectory_prediction_algorithms/yet-another-vectornet/data/"
+    # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
     raw_dir = os.path.join(args.root, "raw_data")
     interm_dir = os.path.join(args.dest, "interm_data" if not args.small else "interm_data_small")
 
@@ -434,8 +433,8 @@ if __name__ == "__main__":
         # construct the preprocessor and dataloader
         argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,
-                            batch_size=16,
-                            num_workers=16,
+                            batch_size=1 if sys.gettrace() else 16,     # 1 batch in debug mode
+                            num_workers=0 if sys.gettrace() else 16,    # use only 0 worker in debug mode
                             shuffle=False,
                             pin_memory=False,
                             drop_last=False)
