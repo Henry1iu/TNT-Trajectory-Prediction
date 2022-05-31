@@ -162,24 +162,12 @@ class TNTTrainer(Trainer):
 
             if training:
                 self.optm_schedule.zero_grad()
+                loss, loss_dict = self.compute_loss(data)
 
                 if self.multi_gpu:
-                    n = data.candidate_len_max[0]
-                    data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
-                    pred, aux_out, aux_gt = self.model(data)
-
-                    gt = {
-                        "target_prob": data.candidate_gt.view(-1, n),
-                        "offset": data.offset_gt.view(-1, 2),
-                        "y": data.y.view(-1, self.horizon * 2)
-                    }
-
-                    loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
                     with amp.scale_loss(loss, self.optim) as scaled_loss:
                         scaled_loss.backward()
-
                 else:
-                    loss, loss_dict = self.model.loss(data)
                     loss.backward()
 
                 self.optim.step()
@@ -198,20 +186,7 @@ class TNTTrainer(Trainer):
 
             else:
                 with torch.no_grad():
-                    if self.multi_gpu:
-                        n = data.candidate_len_max[0]
-                        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
-                        pred, aux_out, aux_gt = self.model(data)
-
-                        gt = {
-                            "target_prob": data.candidate_gt.view(-1, n),
-                            "offset": data.offset_gt.view(-1, 2),
-                            "y": data.y.view(-1, self.horizon * 2)
-                        }
-
-                        loss, loss_dict = self.criterion(pred, gt, aux_out, aux_gt)
-                    else:
-                        loss, loss_dict = self.model.loss(data)
+                    loss, loss_dict = self.compute_loss(data)
 
                     # writing loss
                     if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
@@ -234,6 +209,19 @@ class TNTTrainer(Trainer):
                 self.write_log("LR", learning_rate, epoch + 1)
 
         return avg_loss / num_sample
+
+    def compute_loss(self, data):
+        n = data.candidate_len_max[0]
+        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
+        pred, aux_out, aux_gt = self.model(data)
+
+        gt = {
+            "target_prob": data.candidate_gt.view(-1, n),
+            "offset": data.offset_gt.view(-1, 2),
+            "y": data.y.view(-1, self.horizon * 2)
+        }
+
+        return self.criterion(pred, gt, aux_out, aux_gt)
 
     def test(self,
              miss_threshold=2.0,
@@ -275,8 +263,8 @@ class TNTTrainer(Trainer):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    # out = self.model.module(data.to(self.device))
-                    out = self.model.inference(data.to(self.device))
+                    out = self.model.module(data.to(self.device))
+                    # out = self.model.inference(data.to(self.device))
                 else:
                     out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)

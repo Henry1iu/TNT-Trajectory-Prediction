@@ -75,12 +75,12 @@ class VectorNet(nn.Module):
         args:
             data (Data): [x, y, cluster, edge_index, valid_len]
         """
-        global_feat, _, _ = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
+        global_feat, aux_out, aux_gt = self.backbone(data)              # [batch_size, time_step_len, global_graph_width]
         target_feat = global_feat[:, 0]
 
         pred = self.traj_pred_mlp(target_feat)
 
-        return pred
+        return {"pred": pred, "aux_out": aux_out, "aux_gt":aux_gt}
 
     def loss(self, data):
         global_feat, aux_out, aux_gt = self.backbone(data)
@@ -93,7 +93,7 @@ class VectorNet(nn.Module):
         return self.criterion(pred, y, aux_out, aux_gt)
 
     def inference(self, data):
-        return self.forward(data)
+        return self.forward(data)["pred"]
 
 # class VectorNet(nn.Module):
 #     """

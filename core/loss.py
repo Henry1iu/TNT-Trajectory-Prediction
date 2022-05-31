@@ -25,7 +25,9 @@ class VectorLoss(nn.Module):
         batch_size = pred.size()[0]
         loss = 0.0
 
-        l_traj = F.mse_loss(pred, gt, reduction='sum')
+        # l_traj = F.mse_loss(pred, gt, reduction='sum')
+        vars = torch.ones_like(pred)
+        l_traj = F.gaussian_nll_loss(pred, gt, vars, reduction="sum")
 
         if self.reduction == 'mean':
             l_traj /= batch_size

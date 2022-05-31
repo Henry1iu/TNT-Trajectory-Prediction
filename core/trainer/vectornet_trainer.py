@@ -15,6 +15,7 @@ from apex.parallel import DistributedDataParallel
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
+from core.loss import VectorLoss
 
 
 class VectorNetTrainer(Trainer):
@@ -93,6 +94,7 @@ class VectorNetTrainer(Trainer):
             with_aux=aux_loss,
             device=self.device
         )
+        self.criterion = VectorLoss(aux_loss)
 
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
@@ -147,14 +149,12 @@ class VectorNetTrainer(Trainer):
 
             if training:
                 self.optm_schedule.zero_grad()
+                loss = self.compute_loss(data)
 
                 if self.multi_gpu:
-                    # loss = self.model.module.loss(data.to(self.device))
-                    loss = self.model.loss(data)
                     with amp.scale_loss(loss, self.optim) as scaled_loss:
                         scaled_loss.backward()
                 else:
-                    loss = self.model.loss(data)
                     loss.backward()
 
                 self.optim.step()
@@ -163,11 +163,7 @@ class VectorNetTrainer(Trainer):
 
             else:
                 with torch.no_grad():
-                    if self.multi_gpu:
-                        # loss = self.model.module.loss(data.to(self.device))
-                        loss = self.model.loss(data)
-                    else:
-                        loss = self.model.loss(data)
+                    loss = self.compute_loss(data)
 
                     if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
                         self.write_log("Eval Loss", loss.item() / n_graph, i + epoch * len(dataloader))
@@ -190,6 +186,11 @@ class VectorNetTrainer(Trainer):
                 self.write_log("LR", learning_rate, epoch)
 
         return avg_loss / num_sample
+
+    def compute_loss(self, data):
+        out = self.model(data)
+        y = data.y.view(-1, self.horizon * 2)
+        return self.criterion(out["pred"], y, out["aux_out"], out["aux_gt"])
 
     # todo: the inference of the model
     def test(self, data):

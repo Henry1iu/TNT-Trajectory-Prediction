@@ -53,7 +53,7 @@ class SubGraph(nn.Module):
                 sub_data.x = x
                 agg_data = max_pool(sub_data.cluster, sub_data)
 
-                x = torch.cat([sub_data.x, agg_data.x[sub_data.cluster]], dim=-1)
+                x = torch.cat([x, agg_data.x[sub_data.cluster]], dim=-1)
 
         x = self.linear(x)
         sub_data.x = x
