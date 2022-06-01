@@ -93,7 +93,11 @@ class VectorNet(nn.Module):
         return self.criterion(pred, y, aux_out, aux_gt)
 
     def inference(self, data):
-        return self.forward(data)["pred"]
+        batch_size = data.num_graphs
+
+        pred_traj = self.forward(data)["pred"].view((batch_size, self.k, self.horizon, 2)).cumsum(2)
+
+        return pred_traj
 
 # class VectorNet(nn.Module):
 #     """

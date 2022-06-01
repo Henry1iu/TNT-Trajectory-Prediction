@@ -204,7 +204,7 @@ class TNT(nn.Module):
         # score the predicted trajectory and select the top k trajectory
         score = self.traj_score_layer(target_feat, traj_pred)
 
-        return self.traj_selection(traj_pred, score)
+        return self.traj_selection(traj_pred, score).view(batch_size, self.k, self.horizon, 2)
 
     def candidate_sampling(self, data):
         """

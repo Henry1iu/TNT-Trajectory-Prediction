@@ -125,14 +125,14 @@ class TNTTrainer(Trainer):
         if self.multi_gpu:
             self.model = DistributedDataParallel(self.model)
             self.model, self.optimizer = amp.initialize(self.model, self.optim, opt_level="O0")
-            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0)):
+            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1)):
                 print("[TNTTrainer]: Train the mode with multiple GPUs: {} GPUs.".format(int(os.environ['WORLD_SIZE'])))
         else:
-            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0)):
+            if self.verbose and (not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1)):
                 print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
 
         # record the init learning rate
-        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
             self.write_log("LR", self.lr, 0)
 
         # resume training from ckpt
@@ -173,7 +173,7 @@ class TNTTrainer(Trainer):
                 self.optim.step()
 
                 # writing loss
-                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                     self.write_log("Train_Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
                     self.write_log("Target_Cls_Loss",
                                 loss_dict["tar_cls_loss"].detach().item() / n_graph, i + epoch * len(dataloader))
@@ -189,7 +189,7 @@ class TNTTrainer(Trainer):
                     loss, loss_dict = self.compute_loss(data)
 
                     # writing loss
-                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                         self.write_log("Eval_Loss", loss.item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
@@ -204,7 +204,7 @@ class TNTTrainer(Trainer):
             data_iter.set_description(desc=desc_str, refresh=True)
 
         if training:
-            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                 learning_rate = self.optm_schedule.step_and_update_lr()
                 self.write_log("LR", learning_rate, epoch + 1)
 

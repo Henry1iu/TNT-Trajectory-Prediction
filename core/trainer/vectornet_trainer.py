@@ -94,7 +94,7 @@ class VectorNetTrainer(Trainer):
             with_aux=aux_loss,
             device=self.device
         )
-        self.criterion = VectorLoss(aux_loss)
+        self.criterion = VectorLoss(aux_loss, reduction="sum")
 
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
@@ -121,7 +121,7 @@ class VectorNetTrainer(Trainer):
                 print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
 
         # record the init learning rate
-        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
             self.write_log("LR", self.lr, 0)
 
         # load ckpt
@@ -158,14 +158,14 @@ class VectorNetTrainer(Trainer):
                     loss.backward()
 
                 self.optim.step()
-                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                     self.write_log("Train Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
                     loss = self.compute_loss(data)
 
-                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                         self.write_log("Eval Loss", loss.item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
@@ -181,7 +181,7 @@ class VectorNetTrainer(Trainer):
             data_iter.set_description(desc=desc_str, refresh=True)
 
         if training:
-            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                 learning_rate = self.optm_schedule.step_and_update_lr()
                 self.write_log("LR", learning_rate, epoch)
 
