@@ -109,6 +109,9 @@ class VectorNetTrainer(Trainer):
         # resume from model file or maintain the original
         if model_path:
             self.load(model_path, 'm')
+        # load ckpt
+        elif ckpt_path:
+            self.load(ckpt_path, 'c')
 
         self.model = self.model.to(self.device)
         if self.multi_gpu:
@@ -123,10 +126,6 @@ class VectorNetTrainer(Trainer):
         # record the init learning rate
         if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
             self.write_log("LR", self.lr, 0)
-
-        # load ckpt
-        if ckpt_path:
-            self.load(ckpt_path, 'c')
 
     def iteration(self, epoch, dataloader):
         training = self.model.training

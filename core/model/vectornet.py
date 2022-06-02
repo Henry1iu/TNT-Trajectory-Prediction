@@ -51,7 +51,6 @@ class VectorNet(nn.Module):
         self.k = 1
 
         self.device = device
-        self.criterion = VectorLoss(with_aux)
 
         # subgraph feature extractor
         self.backbone = VectorNetBackbone(
@@ -81,16 +80,6 @@ class VectorNet(nn.Module):
         pred = self.traj_pred_mlp(target_feat)
 
         return {"pred": pred, "aux_out": aux_out, "aux_gt":aux_gt}
-
-    def loss(self, data):
-        global_feat, aux_out, aux_gt = self.backbone(data)
-        target_feat = global_feat[:, 0]
-
-        pred = self.traj_pred_mlp(target_feat)
-
-        y = data.y.view(-1, self.out_channels * self.horizon)
-
-        return self.criterion(pred, y, aux_out, aux_gt)
 
     def inference(self, data):
         batch_size = data.num_graphs

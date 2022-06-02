@@ -34,9 +34,6 @@ class TNT(nn.Module):
                  score_sel_hid=64,
                  temperature=0.01,
                  k=6,
-                 lambda1=0.1,
-                 lambda2=1.0,
-                 lambda3=0.1,
                  device=torch.device("cpu")
                  ):
         """
@@ -67,17 +64,9 @@ class TNT(nn.Module):
         self.m = m
         self.k = k
 
-        self.lambda1 = lambda1
-        self.lambda2 = lambda2
-        self.lambda3 = lambda3
         self.with_aux = with_aux
 
         self.device = device
-        self.criterion = TNTLoss(
-            self.lambda1, self.lambda2, self.lambda3,
-            self.m, self.k, temperature,
-            aux_loss=self.with_aux, device=self.device
-        )
 
         # feature extraction backbone
         self.backbone = VectorNetBackbone(
@@ -156,25 +145,6 @@ class TNT(nn.Module):
             "traj": trajs,
             "score": score
         }, aux_out, aux_gt
-
-    def loss(self, data):
-        """
-        compute loss according to the gt
-        :param data: node feature data
-        :return: loss
-        """
-        n = data.candidate_len_max[0]
-        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
-
-        pred, aux_out, aux_gt = self.forward(data)
-
-        gt = {
-            "target_prob": data.candidate_gt.view(-1, n),
-            "offset": data.offset_gt.view(-1, 2),
-            "y": data.y.view(-1, self.horizon * 2)
-        }
-
-        return self.criterion(pred, gt, aux_out, aux_gt)
 
     def inference(self, data):
         """
