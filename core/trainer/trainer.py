@@ -163,6 +163,9 @@ class Trainer(object):
     def iteration(self, epoch, dataloader):
         raise NotImplementedError
 
+    def compute_loss(self, data):
+        raise NotImplementedError
+
     def write_log(self, name_str, data, epoch):
         if not self.enable_log:
             return

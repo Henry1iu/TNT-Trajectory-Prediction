@@ -149,7 +149,7 @@ class ArgoversePreprocessor(Preprocessor):
         for i, _ in enumerate(ctr_line_candts):
             ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
 
-        tar_candts = self.lane_candidate_sampling(ctr_line_candts, [0, 0], viz=True)
+        tar_candts = self.lane_candidate_sampling(ctr_line_candts, [0, 0], viz=False)
 
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
@@ -266,12 +266,7 @@ class ArgoversePreprocessor(Preprocessor):
                 """Getting polygons requires original centerline"""
                 polygon = self.am.get_lane_segment_polygon(lane_id, data['city'])
                 polygon = copy.deepcopy(polygon)
-
-                # rescale centerines
-                spline_ctr = Spline2D(x, y)
-                s_rescaled = np.arange(0, spline_ctr.s[-1], RESCALE_LENGTH)
-                x_rescaled, y_rescaled = spline_ctr.calc_global_position_online(s_rescaled)
-                lane.centerline = np.stack([x_rescaled, y_rescaled], axis=1)
+                lane.centerline = centerline
                 lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
                 lanes[lane_id] = lane
 
