@@ -108,7 +108,7 @@ class ArgoverseInMem(InMemoryDataset):
                 x=torch.from_numpy(x).float(),
                 y=torch.from_numpy(y).float(),
                 cluster=torch.from_numpy(cluster).short(),
-                edge_index=torch.from_numpy(edge_index).short(),
+                edge_index=torch.from_numpy(edge_index).long(),
                 identifier=torch.from_numpy(identifier).float(),    # the identify embedding of global graph completion
 
                 traj_len=torch.tensor([traj_lens[ind]]).int(),            # number of traj polyline
@@ -143,7 +143,6 @@ class ArgoverseInMem(InMemoryDataset):
         assert max(data.cluster.cpu().numpy()) + 1 == valid_len, ""
 
         data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad, dtype=data.cluster.dtype)]).long()
-        data.edge_index = data.edge_index.long()
         data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.identifier.dtype)])
 
         # pad candidate and candidate_gt

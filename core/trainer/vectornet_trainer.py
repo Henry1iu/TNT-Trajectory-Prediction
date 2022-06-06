@@ -9,8 +9,11 @@ from torch_geometric.nn import DataParallel
 from argoverse.evaluation.eval_forecasting import get_displacement_errors_and_miss_rate
 from argoverse.evaluation.competition_util import generate_forecasting_h5
 
-from apex import amp
-from apex.parallel import DistributedDataParallel
+try:
+    from apex import amp
+    from apex.parallel import DistributedDataParallel
+except:
+    pass
 
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
