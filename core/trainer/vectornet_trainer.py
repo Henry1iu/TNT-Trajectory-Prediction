@@ -15,6 +15,7 @@ from apex.parallel import DistributedDataParallel
 from core.trainer.trainer import Trainer
 from core.model.vectornet import VectorNet, OriginalVectorNet
 from core.optim_schedule import ScheduledOptim
+from core.loss import VectorLoss
 
 
 class VectorNetTrainer(Trainer):
@@ -93,6 +94,7 @@ class VectorNetTrainer(Trainer):
             with_aux=aux_loss,
             device=self.device
         )
+        self.criterion = VectorLoss(aux_loss, reduction="sum")
 
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
@@ -107,6 +109,9 @@ class VectorNetTrainer(Trainer):
         # resume from model file or maintain the original
         if model_path:
             self.load(model_path, 'm')
+        # load ckpt
+        elif ckpt_path:
+            self.load(ckpt_path, 'c')
 
         self.model = self.model.to(self.device)
         if self.multi_gpu:
@@ -119,12 +124,8 @@ class VectorNetTrainer(Trainer):
                 print("[TNTTrainer]: Train the mode with single device on {}.".format(self.device))
 
         # record the init learning rate
-        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
             self.write_log("LR", self.lr, 0)
-
-        # load ckpt
-        if ckpt_path:
-            self.load(ckpt_path, 'c')
 
     def iteration(self, epoch, dataloader):
         training = self.model.training
@@ -147,29 +148,23 @@ class VectorNetTrainer(Trainer):
 
             if training:
                 self.optm_schedule.zero_grad()
+                loss = self.compute_loss(data)
 
                 if self.multi_gpu:
-                    # loss = self.model.module.loss(data.to(self.device))
-                    loss = self.model.loss(data)
                     with amp.scale_loss(loss, self.optim) as scaled_loss:
                         scaled_loss.backward()
                 else:
-                    loss = self.model.loss(data)
                     loss.backward()
 
                 self.optim.step()
-                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                     self.write_log("Train Loss", loss.detach().item() / n_graph, i + epoch * len(dataloader))
 
             else:
                 with torch.no_grad():
-                    if self.multi_gpu:
-                        # loss = self.model.module.loss(data.to(self.device))
-                        loss = self.model.loss(data)
-                    else:
-                        loss = self.model.loss(data)
+                    loss = self.compute_loss(data)
 
-                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+                    if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                         self.write_log("Eval Loss", loss.item() / n_graph, i + epoch * len(dataloader))
 
             num_sample += n_graph
@@ -185,11 +180,16 @@ class VectorNetTrainer(Trainer):
             data_iter.set_description(desc=desc_str, refresh=True)
 
         if training:
-            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+            if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
                 learning_rate = self.optm_schedule.step_and_update_lr()
                 self.write_log("LR", learning_rate, epoch)
 
         return avg_loss / num_sample
+
+    def compute_loss(self, data):
+        out = self.model(data)
+        y = data.y.view(-1, self.horizon * 2)
+        return self.criterion(out["pred"], y, out["aux_out"], out["aux_gt"])
 
     # todo: the inference of the model
     def test(self, data):

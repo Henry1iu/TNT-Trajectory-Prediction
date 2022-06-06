@@ -26,7 +26,8 @@ class VectorLoss(nn.Module):
         loss = 0.0
 
         l_traj = F.mse_loss(pred, gt, reduction='sum')
-
+        # vars = torch.ones_like(pred) * 0.5
+        # l_traj = F.gaussian_nll_loss(pred, gt, vars, reduction="sum")
         if self.reduction == 'mean':
             l_traj /= batch_size
 
@@ -37,7 +38,7 @@ class VectorLoss(nn.Module):
                 return loss
             assert aux_pred.size() == aux_gt.size(), "[VectorLoss]: The dim of prediction and ground truth don't match!"
 
-            l_node = F.smooth_l1_loss(aux_pred, aux_gt, reduction=self.reduction)
+            l_node = F.smooth_l1_loss(aux_pred, aux_gt, reduction="sum")
             if self.reduction == 'mean':
                 l_node /= batch_size
             loss += self.alpha * l_node

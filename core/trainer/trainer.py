@@ -211,10 +211,17 @@ class Trainer(object):
         # skip model saving if the minADE is not better
         if self.best_metric and isinstance(metric, dict):
             if metric["minADE"] >= self.best_metric["minADE"]:
-                print("[Trainer]: Best minADE: {}; Current minADE: {}; Skip model saving...".format(self.best_metric["minADE"], metric["minADE"]))
+                print("[Trainer]: Best minADE: {}; Current minADE: {}; Skip model saving...".format(
+                    self.best_metric["minADE"],
+                    metric["minADE"]))
                 return
 
         # save best metric
+        if self.verbose:
+            print("[Trainer]: Best minADE: {}; Current minADE: {}; Saving model to {}...".format(
+                self.best_metric["minADE"] if self.best_metric else "Inf",
+                metric["minADE"],
+                self.save_folder))
         self.best_metric = metric
         metric_stored_file = os.path.join(self.save_folder, "{}_metrics.txt".format(prefix))
         with open(metric_stored_file, 'a+') as f:
@@ -227,8 +234,6 @@ class Trainer(object):
             # self.model.state_dict(),
             os.path.join(self.save_folder, "{}_{}.pth".format(prefix, type(self.model).__name__))
         )
-        if self.verbose:
-            print("[Trainer]: Saving model to {}...".format(self.save_folder))
 
     def load(self, load_path, mode='c'):
         """
@@ -241,10 +246,7 @@ class Trainer(object):
             # load ckpt
             ckpt = torch.load(load_path, map_location=self.device)
             try:
-                if self.multi_gpu:
-                    self.model.load_state_dict(ckpt["model_state_dict"])
-                else:
-                    self.model.load_state_dict(ckpt["model_state_dict"])
+                self.model.load_state_dict(ckpt["model_state_dict"])
                 self.optim.load_state_dict(ckpt["optimizer_state_dict"])
                 self.min_eval_loss = ckpt["min_eval_loss"]
             except:
@@ -283,11 +285,9 @@ class Trainer(object):
                 # inference and transform dimension
                 if self.multi_gpu:
                     out = self.model.module.inference(data.to(self.device))
-                    # out = self.model(data.to(self.device))
                 else:
                     out = self.model.inference(data.to(self.device))
-                dim_out = len(out.shape)
-                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cpu().numpy()
+                pred_y = out.cpu().numpy()
 
                 # record the prediction and ground truth
                 for batch_id in range(batch_size):
