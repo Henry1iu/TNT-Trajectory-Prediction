@@ -7,10 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import DataLoader, Batch, Data
 
-# from core.model.layers.global_graph import GlobalGraph
 from core.model.layers.global_graph_v2 import GlobalGraph
-# from core.model.layers.att_pool_subgraph import SubGraph
-# from core.model.layers.subgraph import SubGraph
 from core.model.layers.subgraph_v2 import SubGraph
 from core.model.layers.basic_module import MLP
 from core.dataloader.argoverse_loader_v2 import ArgoverseInMem, GraphData
