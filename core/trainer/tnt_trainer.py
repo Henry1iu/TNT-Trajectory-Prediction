@@ -90,6 +90,10 @@ class TNTTrainer(Trainer):
         self.horizon = horizon
         self.aux_loss = aux_loss
 
+        self.lambda1 = 0.1
+        self.lambda2 = 1.0
+        self.lambda3 = 0.1
+
         # input dim: (20, 8); output dim: (30, 2)
         # model_name = VectorNet
         model_name = TNT
@@ -101,9 +105,9 @@ class TNTTrainer(Trainer):
             device=self.device
         )
         self.criterion = TNTLoss(
-            self.model.lambda1, self.model.lambda2, self.model.lambda3,
+            self.lambda1, self.lambda2, self.lambda3,
             self.model.m, self.model.k, 0.01,
-            aux_loss=self.model.with_aux,
+            aux_loss=self.aux_loss,
             device=self.device
         )
 

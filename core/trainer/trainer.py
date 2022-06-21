@@ -138,7 +138,7 @@ class Trainer(object):
         # log
         self.enable_log = enable_log
         self.save_folder = save_folder
-        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 0):
+        if not self.multi_gpu or (self.multi_gpu and self.cuda_id == 1):
             self.logger = SummaryWriter(log_dir=os.path.join(self.save_folder, "log"))
         self.log_freq = log_freq
         self.verbose = verbose
@@ -163,6 +163,9 @@ class Trainer(object):
     def iteration(self, epoch, dataloader):
         raise NotImplementedError
 
+    def compute_loss(self, data):
+        raise NotImplementedError
+
     def write_log(self, name_str, data, epoch):
         if not self.enable_log:
             return
@@ -177,7 +180,7 @@ class Trainer(object):
         :param loss: float, the loss of current saving state
         :return:
         """
-        if self.multi_gpu and self.cuda_id != 0:
+        if self.multi_gpu and self.cuda_id != 1:
             return
 
         self.min_eval_loss = loss
@@ -199,7 +202,7 @@ class Trainer(object):
         :param prefix: str, the prefix to the model file
         :return:
         """
-        if self.multi_gpu and self.cuda_id != 0:
+        if self.multi_gpu and self.cuda_id != 1:
             return
 
         if not os.path.exists(self.save_folder):

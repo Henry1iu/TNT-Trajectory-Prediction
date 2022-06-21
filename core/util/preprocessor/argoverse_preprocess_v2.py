@@ -266,7 +266,7 @@ class ArgoversePreprocessor(Preprocessor):
                 """Getting polygons requires original centerline"""
                 polygon = self.am.get_lane_segment_polygon(lane_id, data['city'])
                 polygon = copy.deepcopy(polygon)
-                lane.centerline = np.stack([x, y], axis=1)
+                lane.centerline = centerline
                 lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
                 lanes[lane_id] = lane
 
