@@ -140,8 +140,6 @@ class ArgoverseInMem(InMemoryDataset):
 
         # pad feature with zero nodes
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
-        assert max(data.cluster.cpu().numpy()) + 1 == valid_len, ""
-
         data.cluster = torch.cat([data.cluster, torch.arange(valid_len, index_to_pad, dtype=data.cluster.dtype)]).long()
         data.identifier = torch.cat([data.identifier, torch.zeros((index_to_pad - valid_len, 2), dtype=data.identifier.dtype)])
 
@@ -386,7 +384,7 @@ class ArgoverseInDisk(Dataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data"
 
     for folder in ["train", "val", "test"]:
     # for folder in ["test"]:

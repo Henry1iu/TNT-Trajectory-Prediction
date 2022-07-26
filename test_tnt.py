@@ -58,7 +58,7 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-r", "--data_root", type=str, default="dataset/interm_data_small",
+    parser.add_argument("-r", "--data_root", type=str, default="dataset/interm_data_2022",
                         help="root dir for datasets")
     parser.add_argument("-s", "--split", type=str, default="test")
 
@@ -68,14 +68,14 @@ if __name__ == "__main__":
                         help="dataloader worker size")
     parser.add_argument("-c", "--with_cuda", action="store_true", default=True,
                         help="training with CUDA: true, or false")
-    parser.add_argument("-cd", "--cuda_device", type=int, default=[1, 0], nargs='+',
+    parser.add_argument("-cd", "--cuda_device", type=int, default=0,
                         help="CUDA device ids")
 
     parser.add_argument("-rc", "--resume_checkpoint", type=str,
                         # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/05-21-07-33/checkpoint_iter26.ckpt",
                         help="resume a checkpoint for fine-tune")
     parser.add_argument("-rm", "--resume_model", type=str,
-                        # default="/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/run/tnt/01-22-18-55/best_TNT.pth",
+                        default="/home/jb/Downloads/TNT/TNT/best_TNT.pth",
                         help="resume a model state for fine-tune")
 
     parser.add_argument("-d", "--save_dir", type=str, default="test_result")

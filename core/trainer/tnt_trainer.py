@@ -277,7 +277,7 @@ class TNTTrainer(Trainer):
                 out_dict[out_cnt] = out.cpu().numpy()
                 out_cnt += 1
 
-                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cumsum(axis=2).cpu().numpy()
+                pred_y = out.unsqueeze(dim_out).view((batch_size, k, horizon, 2)).cpu().numpy()
 
                 # record the prediction and ground truth
                 for batch_id in range(batch_size):
