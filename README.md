@@ -12,7 +12,7 @@ and
 
 
 ### Achieved Best Performance
-The best performance achieved by our implementation and reported in the papers. 
+The best performance achieved by our implementation and reported in the papers on the evaluation dataset. 
 
 | Algorithm | minADE(K=1) | minFDE(K=1) | MR(2.0m) | minADE(K=6) | minFDE(K=6) | MR(2.0m) |
 | :-------: |:-----------:|:-----------:|:--------:|:-----------:|:-----------:|:--------:|
@@ -20,6 +20,15 @@ The best performance achieved by our implementation and reported in the papers.
 | VectorNet (**Ours**) |    1.46     |    3.15     |  0.548   |      -      |      -      |    -     |
 |  TNT(Original)   |      -      |      -      |    -     |    0.728    |    1.292    |  0.093   |
 |  TNT(**Ours**)   |      -      |      -      |    -     |    0.928    |    1.686    |  0.195   |
+
+The best performance achieved by our implementation and reported in the papers on the test dataset on 
+[Argoverse Leaderboard](https://eval.ai/web/challenges/challenge-page/454/leaderboard).
+
+|    Algorithm     |  minADE(K=6)  | minFDE(K=6)  | MR(2.0m)  |
+|:----------------:|:-------------:|:------------:|:---------:|
+| 	TNT - CoRL20    |    0.9097     |    1.4457    |  0.1656   |
+|  	CUHK RPAI (TNT_20220819)   |    1.1518     |    2.1322    |  0.2585   |
+
 
 * [VectorNet Pre-trained Weights](https://mycuhk-my.sharepoint.com/:u:/g/personal/1155071948_link_cuhk_edu_hk/Ee7FZXGwXB9Mh7O7wSHjAlUBH5uB1fP9LEXPP8TS1lSFTQ?e=ajPXMo)
 * [TNT Pre-trained Weights](https://mycuhk-my.sharepoint.com/:u:/g/personal/1155071948_link_cuhk_edu_hk/EfgqFbzKKJlJle7E-y-DVCkBVQQQH09CUwTDN5GfjtYAOg?e=mUINGD)
