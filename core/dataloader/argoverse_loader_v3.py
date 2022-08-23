@@ -64,10 +64,13 @@ class GraphData(Data):
 
 # dataset loader which loads data into memory
 class ArgoverseInMem(InMemoryDataset):
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root, angle_norm=False, random_rot=False, transform=None, pre_transform=None):
         super(ArgoverseInMem, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
         gc.collect()
+
+        self.angle_norm = angle_norm
+        self.random_rot = random_rot
 
     @property
     def raw_file_names(self):
@@ -144,6 +147,25 @@ class ArgoverseInMem(InMemoryDataset):
         feature_len = data.x.shape[1]
         index_to_pad = data.time_step_len[0].item()
         valid_len = data.valid_len[0].item()
+
+        if self.angle_norm or self.random_rot:
+            rot = torch.eye(2)
+            if self.angle_norm:
+                rot = torch.matmul(data.rot.squeeze(0), rot)
+            if self.random_rot:
+                degree = np.random.uniform() * np.pi * 2        # random rotate degree
+                sin, cos = np.sin(degree), np.cos(degree)
+                rot = torch.matmul(torch.tensor([[cos, sin], [-sin, cos]], dtype=data.traj_x.dtype), rot)
+            # rotate the ctr points
+            data.x[:, :2] = torch.matmul(rot, data.x[:, :2].transpose(0, 1)).transpose(0, 1)
+            data.x[:, 2:4] = torch.matmul(rot, data.x[:, 2:4].transpose(0, 1)).transpose(0, 1)
+
+            data.identifier = torch.matmul(rot, data.identifier.transpose(0, 1)).transpose(0, 1)
+
+            data.candidate = torch.matmul(rot, data.candidate.transpose(0, 1)).transpose(0, 1)
+
+            y = data.y.unsqueeze(1).view(1, -1, 2).squeeze(0).transpose(0, 1)
+            data.y = torch.matmul(rot, y).transpose(0, 1).reshape(1, -1)
 
         # pad feature with zero nodes
         data.x = torch.cat([data.x, torch.zeros((index_to_pad - valid_len, feature_len), dtype=data.x.dtype)])
