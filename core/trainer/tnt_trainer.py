@@ -314,6 +314,8 @@ class TNTTrainer(Trainer):
                 forecasted_trajectories[key] = np.asarray(forecasted_trajectories[key])
             generate_forecasting_h5(forecasted_trajectories, self.save_folder)
 
+        return forecasted_trajectories
+
     # function to convert the coordinates of trajectories from relative to world
     def convert_coord(self, traj, orig, rot):
         traj_converted = np.matmul(np.linalg.inv(rot), traj.T).T + orig.reshape(-1, 2)

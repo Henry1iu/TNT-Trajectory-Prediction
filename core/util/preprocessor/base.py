@@ -115,14 +115,17 @@ class Preprocessor(Dataset):
         return np.stack(np.meshgrid(x, x), -1).reshape(-1, 2)
 
     # implement a candidate sampling with equal distance;
-    def lane_candidate_sampling(self, centerline_list, orig, distance=0.5, viz=False):
+    def lane_candidate_sampling(self, centerline_list, lane_width, orig=None, distance=0.5, viz=False):
         """the input are list of lines, each line containing"""
+        if orig is None:
+            orig = [0, 0]
         candidates = []
         for lane_id, line in enumerate(centerline_list):
             sp = Spline2D(x=line[:, 0], y=line[:, 1])
             s_o, d_o = sp.calc_frenet_position(orig[0], orig[1])
             s = np.arange(s_o, sp.s[-1], distance)
-            ix, iy = sp.calc_global_position_online(s)
+            d = np.arange(-lane_width / 2, lane_width/2, distance)
+            ix, iy = sp.calc_global_position_offline(s, d)
             candidates.append(np.stack([ix, iy], axis=1))
         candidates = np.unique(np.concatenate(candidates), axis=0)
 

@@ -1,6 +1,9 @@
 # About: script to processing argoverse forecasting dataset
 # Author: Jianbang LIU @ RPAI, CUHK
 # Date: 2021.07.16
+# Modified:
+#           1. Leave the angle normalization to the loader
+#           2. Increase the target position sampling density (0.5m horizontally and vertically)
 
 import os
 import argparse
@@ -39,7 +42,6 @@ class ArgoversePreprocessor(Preprocessor):
                  obs_horizon=20,
                  obs_range=100,
                  pred_horizon=30,
-                 normalized=True,
                  save_dir=None):
         super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range, pred_horizon)
 
@@ -47,7 +49,6 @@ class ArgoversePreprocessor(Preprocessor):
         self.COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#7fd0eb", "AV": "#007672"}
 
         self.split = split
-        self.normalized = normalized
 
         self.am = ArgoverseMap()
         self.loader = ArgoverseForecastingLoader(pjoin(self.root_dir, self.split+"_obs" if split == "test" else split))
@@ -121,41 +122,37 @@ class ArgoversePreprocessor(Preprocessor):
 
     def get_obj_feats(self, data):
         # get the origin and compute the oritentation of the target agent
+        city = data['city']
         orig = data['trajs'][0][self.obs_horizon-1].copy().astype(np.float32)
 
         # comput the rotation matrix
-        if self.normalized:
-            pre, conf = self.am.get_lane_direction(data['trajs'][0][self.obs_horizon-1], data['city'])
-            if conf <= 0.1:
-                pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
-            theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
-            rot = np.asarray([
-                [np.cos(theta), -np.sin(theta)],
-                [np.sin(theta), np.cos(theta)]], np.float32)
-        else:
-            # if not normalized, do not rotate.
-            theta = None
-            rot = np.asarray([
-                [1.0, 0.0],
-                [0.0, 1.0]], np.float32)
+        pre, conf = self.am.get_lane_direction(data['trajs'][0][self.obs_horizon-1], data['city'])
+        if conf <= 0.1:
+            pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
+        theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
+        rot = np.asarray([
+            [np.cos(theta), -np.sin(theta)],
+            [np.sin(theta), np.cos(theta)]], np.float32)
+        orig = orig.reshape(-1, 2)
 
         # get the target candidates and candidate gt
-        agt_traj_obs = data['trajs'][0][0: self.obs_horizon].copy().astype(np.float32)
-        agt_traj_fut = data['trajs'][0][self.obs_horizon:self.obs_horizon+self.pred_horizon].copy().astype(np.float32)
+        agt_traj_fut = data['trajs'][0].copy().astype(np.float32)
+        agt_traj_obs = agt_traj_fut[0: self.obs_horizon].copy()
+        agt_traj_fut = agt_traj_fut[self.obs_horizon: self.obs_horizon+self.pred_horizon].copy()
         ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'], viz=False)
 
         # rotate the center lines and find the reference center line
-        agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
+        # agt_traj_fut = np.matmul(rot, (agt_traj_fut - orig.reshape(-1, 2)).T).T
+        agt_traj_fut = agt_traj_fut - orig
         for i, _ in enumerate(ctr_line_candts):
-            ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
+            # ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
+            ctr_line_candts[i] = ctr_line_candts[i] - orig
 
-        tar_candts = self.lane_candidate_sampling(ctr_line_candts, [0, 0], viz=False)
+        tar_candts = self.lane_candidate_sampling(ctr_line_candts, self.LANE_WIDTH[city], viz=True)
 
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
-            splines, ref_idx = None, None
         else:
-            splines, ref_idx = self.get_ref_centerline(ctr_line_candts, agt_traj_fut)
             tar_candts_gt, tar_offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
 
         # self.plot_target_candidates(ctr_line_candts, agt_traj_obs, agt_traj_fut, tar_candts)
@@ -168,8 +165,9 @@ class ArgoversePreprocessor(Preprocessor):
             if self.obs_horizon-1 not in step:
                 continue
 
-            # normalize and rotate
-            traj_nd = np.matmul(rot, (traj - orig.reshape(-1, 2)).T).T
+            # normalize
+            # traj_nd = np.matmul(rot, (traj - orig.reshape(-1, 2)).T).T
+            traj_nd = traj - orig
 
             # collect the future prediction ground truth
             gt_pred = np.zeros((self.pred_horizon, 2), np.float32)
@@ -242,8 +240,6 @@ class ArgoversePreprocessor(Preprocessor):
         data['gt_candts'] = tar_candts_gt
         data['gt_tar_offset'] = tar_offse_gt
 
-        data['ref_ctr_lines'] = splines         # the reference candidate centerlines Spline for prediction
-        data['ref_cetr_idx'] = ref_idx          # the idx of the closest reference centerlines
         return data
 
     def get_lane_graph(self, data):
@@ -258,7 +254,8 @@ class ArgoversePreprocessor(Preprocessor):
             lane = self.am.city_lane_centerlines_dict[data['city']][lane_id]
             lane = copy.deepcopy(lane)
 
-            centerline = np.matmul(data['rot'], (lane.centerline - data['orig'].reshape(-1, 2)).T).T
+            # centerline = np.matmul(data['rot'], (lane.centerline - data['orig'].reshape(-1, 2)).T).T
+            centerline = lane.centerline - data['orig'].reshape(-1, 2)
             x, y = centerline[:, 0], centerline[:, 1]
             if x.max() < x_min or x.min() > x_max or y.max() < y_min or y.min() > y_max:
                 continue
@@ -267,7 +264,8 @@ class ArgoversePreprocessor(Preprocessor):
                 polygon = self.am.get_lane_segment_polygon(lane_id, data['city'])
                 polygon = copy.deepcopy(polygon)
                 lane.centerline = centerline
-                lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
+                # lane.polygon = np.matmul(data['rot'], (polygon[:, :2] - data['orig'].reshape(-1, 2)).T).T
+                lane.polygon = polygon[:, :2] - data['orig'].reshape(-1, 2)
                 lanes[lane_id] = lane
 
         lane_ids = list(lanes.keys())
@@ -417,15 +415,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, default="../dataset")
     parser.add_argument("-d", "--dest", type=str, default="../dataset")
-    parser.add_argument("-s", "--small", action='store_true', default=False)
+    parser.add_argument("-s", "--small", action='store_true', default=True)
     args = parser.parse_args()
 
     args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
     raw_dir = os.path.join(args.root, "raw_data")
-    interm_dir = os.path.join(args.dest, "interm_data_2022" if not args.small else "interm_data_small")
+    interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_v3_small")
 
-    # for split in ["train", "val", "test"]:
-    for split in ["test"]:
+    for split in ["train", "val", "test"]:
+    # for split in ["test"]:
         # construct the preprocessor and dataloader
         argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,

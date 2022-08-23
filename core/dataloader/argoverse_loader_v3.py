@@ -1,3 +1,10 @@
+# About: script to processing argoverse forecasting dataset
+# Author: Jianbang LIU @ RPAI, CUHK
+# Date: 2022.08.23
+# Modified:
+#           todo: 1. Add angle normalization
+#           todo: 2. Add random rotation
+
 import sys
 import os
 import os.path as osp
@@ -384,7 +391,9 @@ class ArgoverseInDisk(Dataset):
 if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
+    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3_small"
+    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3"
 
     # for folder in ["train", "val", "test"]:
     for folder in ["test"]:

@@ -173,10 +173,11 @@ class Spline2D:
         s_x = self.sx.calc(s)
         s_y = self.sy.calc(s)
 
-        theta = math.atan2(self.sy.calcd(s), self.sx.calcd(s))
-        x = s_x - math.sin(theta) * d
-        y = s_y + math.cos(theta) * d
-        return x, y
+        theta = np.arctan2(self.sy.calcd(s), self.sx.calcd(s))
+        dd, _ = np.meshgrid(d, np.zeros((1, len(theta))))
+        x = s_x.reshape(-1, 1) - np.sin(theta).reshape(-1, 1) * dd
+        y = s_y.reshape(-1, 1) + np.cos(theta).reshape(-1, 1) * dd
+        return x.reshape(-1), y.reshape(-1)
 
     def calc_frenet_position(self, x, y):
         """
@@ -247,9 +248,10 @@ def main():  # pragma: no cover
 
     sp = Spline2D(x, y)
     s = np.arange(0, sp.s[-1], ds)
+    d = np.array([-0.5, 0, 0.5])
 
     rx, ry, ryaw, rk = [], [], [], []
-    rx, ry = sp.calc_global_position_online(s)
+    rx, ry = sp.calc_global_position_offline(s, d)
     ryaw = sp.calc_yaw(s)
     rk = sp.calc_curvature(s)
 
