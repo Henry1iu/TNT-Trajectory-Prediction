@@ -148,7 +148,7 @@ class ArgoversePreprocessor(Preprocessor):
             # ctr_line_candts[i] = np.matmul(rot, (ctr_line_candts[i] - orig.reshape(-1, 2)).T).T
             ctr_line_candts[i] = ctr_line_candts[i] - orig
 
-        tar_candts = self.lane_candidate_sampling(ctr_line_candts, self.LANE_WIDTH[city], viz=True)
+        tar_candts = self.lane_candidate_sampling(ctr_line_candts, self.LANE_WIDTH[city], viz=False)
 
         if self.split == "test":
             tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
@@ -227,7 +227,7 @@ class ArgoversePreprocessor(Preprocessor):
         # if not np.any(candts_gt[inlier]):
         #     raise Exception("The gt of target candidate exceeds the observation range!")
 
-        data['orig'] = orig
+        data['orig'] = orig.reshape(-1)
         data['theta'] = theta
         data['rot'] = rot
 
@@ -339,9 +339,9 @@ class ArgoversePreprocessor(Preprocessor):
         plt.xlabel("Map X")
         plt.ylabel("Map Y")
         plt.axis("off")
-        plt.show()
-        # plt.show(block=False)
-        # plt.pause(0.5)
+        # plt.show()
+        plt.show(block=False)
+        plt.pause(0.5)
 
     @staticmethod
     def get_ref_centerline(cline_list, pred_gt):
@@ -418,7 +418,8 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--small", action='store_true', default=True)
     args = parser.parse_args()
 
-    args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
+    # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
+    args.root = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset"
     raw_dir = os.path.join(args.root, "raw_data")
     interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_v3_small")
 

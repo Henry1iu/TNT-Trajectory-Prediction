@@ -125,7 +125,7 @@ class Preprocessor(Dataset):
             s_o, d_o = sp.calc_frenet_position(orig[0], orig[1])
             s = np.arange(s_o, sp.s[-1], distance)
             d = np.arange(-lane_width / 2, lane_width/2, distance)
-            ix, iy = sp.calc_global_position_offline(s, d)
+            ix, iy = sp.calc_global_position_offline(s, d[2:-1])
             candidates.append(np.stack([ix, iy], axis=1))
         candidates = np.unique(np.concatenate(candidates), axis=0)
 
