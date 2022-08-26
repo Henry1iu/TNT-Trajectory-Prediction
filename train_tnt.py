@@ -6,7 +6,8 @@ import json
 import argparse
 
 # from core.dataloader.argoverse_loader import Argoverse, GraphData, ArgoverseInMem
-from core.dataloader.argoverse_loader_v2 import ArgoverseInMem as ArgoverseInMemv2, GraphData
+# from core.dataloader.argoverse_loader_v2 import ArgoverseInMem, GraphData
+from core.dataloader.argoverse_loader_v3 import ArgoverseInMem, GraphData
 from core.trainer.tnt_trainer import TNTTrainer
 
 sys.path.append("core/dataloader")
@@ -18,8 +19,8 @@ def train(gpu, args):
     :param args:
     :return:
     """
-    train_set = ArgoverseInMemv2(pjoin(args.data_root, "train_intermediate")).shuffle()
-    eval_set = ArgoverseInMemv2(pjoin(args.data_root, "val_intermediate"))
+    train_set = ArgoverseInMem(pjoin(args.data_root, "train_intermediate"), angle_norm=True).shuffle()
+    eval_set = ArgoverseInMem(pjoin(args.data_root, "val_intermediate"), angle_norm=True)
 
     # init output dir
     time_stamp = datetime.now().strftime("%m-%d-%H-%M")

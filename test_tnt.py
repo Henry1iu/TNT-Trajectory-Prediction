@@ -2,8 +2,12 @@ import os
 import sys
 from os.path import join as pjoin
 from datetime import datetime
+from matplotlib import pyplot as plt
 
 import argparse
+from argoverse.data_loading.argoverse_forecasting_loader import ArgoverseForecastingLoader
+from argoverse.map_representation.map_api import ArgoverseMap
+from argoverse.visualization.visualize_sequences import viz_sequence
 
 # from torch.utils.data import DataLoader
 from torch_geometric.data import DataLoader
@@ -52,7 +56,28 @@ def test(args):
         model_path=args.resume_model if hasattr(args, "resume_model") and args.resume_model else None
     )
 
-    trainer.test(miss_threshold=2.0, save_pred=True, convert_coordinate=True)
+    forcasted_trajs = trainer.test(miss_threshold=2.0, save_pred=True, convert_coordinate=True, compute_metric=False)
+
+    # root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
+    # split_dir = pjoin(root, "raw_data", args.split+"_obs" if args.split == "test" else args.split)
+    #
+    # loader = ArgoverseForecastingLoader(split_dir)
+    #
+    # for seq_id in forcasted_trajs.keys():
+    #     trajs = forcasted_trajs[seq_id]
+    #     f_path = os.path.join(split_dir, '{}.csv'.format(seq_id))
+    #     seq = loader.get(f_path)
+    #
+    #     viz_sequence(seq.seq_df, show=False)
+    #
+    #     # plot the predicted trajectories
+    #     for i, traj in enumerate(trajs):
+    #         plt.plot(traj[:, 0], traj[:, 1], "-", color="g", label="fut_" + str(i), linewidth=1)
+    #         plt.plot(traj[0, 0], traj[0, 1], "o", color="g", linewidth=1)
+    #         plt.plot(traj[-1, 0], traj[-1, 1], "x-", color="g", linewidth=1)
+    #         plt.text(traj[-1, 0], traj[-1, 1], "fut_" + str(i))
+    #
+    #     plt.show()
 
 
 if __name__ == "__main__":

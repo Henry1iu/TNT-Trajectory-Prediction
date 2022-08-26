@@ -11,4 +11,4 @@
 #python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data -o run/tnt/ -a -b 128 -c -m --lr 0.0012 -luf 10 -ldr 0.3
 
 # when you need to choose the training GPU
-CUDA_VISIBLE_DEVICES=1,0 python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data_small -o run/tnt/ -a -b 128 -c -m --lr 0.0012 -luf 10 -ldr 0.3
+CUDA_VISIBLE_DEVICES=1,0 python -m torch.distributed.launch --nproc_per_node=2 train_tnt.py -d dataset/interm_data_v3_small -o run/tnt/ -a -b 64 -c -m --lr 0.0012 -luf 10 -ldr 0.3

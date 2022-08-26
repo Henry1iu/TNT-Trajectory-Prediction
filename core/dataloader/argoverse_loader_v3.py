@@ -155,7 +155,7 @@ class ArgoverseInMem(InMemoryDataset):
             if self.random_rot:
                 degree = np.random.uniform() * np.pi * 2        # random rotate degree
                 sin, cos = np.sin(degree), np.cos(degree)
-                rot = torch.matmul(torch.tensor([[cos, sin], [-sin, cos]], dtype=data.traj_x.dtype), rot)
+                rot = torch.matmul(torch.tensor([[cos, sin], [-sin, cos]], dtype=data.x.dtype), rot)
             # rotate the ctr points
             data.x[:, :2] = torch.matmul(rot, data.x[:, :2].transpose(0, 1)).transpose(0, 1)
             data.x[:, 2:4] = torch.matmul(rot, data.x[:, 2:4].transpose(0, 1)).transpose(0, 1)
@@ -414,15 +414,15 @@ if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3_small"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_small_v3"
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3"
 
-    # for folder in ["train", "val", "test"]:
-    for folder in ["test"]:
+    for folder in ["train", "val", "test"]:
+    # for folder in ["test"]:
         dataset_input_path = os.path.join(INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         # dataset = Argoverse(dataset_input_path)
-        dataset = ArgoverseInMem(dataset_input_path).shuffle()
+        dataset = ArgoverseInMem(dataset_input_path, angle_norm=True, random_rot=True).shuffle()
         batch_iter = DataLoader(dataset, batch_size=16, num_workers=16, shuffle=True, pin_memory=False)
         for k in range(1):
             for i, data in enumerate(tqdm(batch_iter, total=len(batch_iter), bar_format="{l_bar}{r_bar}")):

@@ -415,13 +415,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, default="../dataset")
     parser.add_argument("-d", "--dest", type=str, default="../dataset")
-    parser.add_argument("-s", "--small", action='store_true', default=True)
+    parser.add_argument("-s", "--small", action='store_true', default=False)
     args = parser.parse_args()
 
     # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
-    args.root = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset"
+    # args.root = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset"
     raw_dir = os.path.join(args.root, "raw_data")
-    interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_v3_small")
+    interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_small_v3")
 
     for split in ["train", "val", "test"]:
     # for split in ["test"]:
