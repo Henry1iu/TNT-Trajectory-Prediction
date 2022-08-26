@@ -72,6 +72,8 @@ class ArgoverseInMem(InMemoryDataset):
         self.angle_norm = angle_norm
         self.random_rot = random_rot
 
+        self.seed =np.random.seed(48)
+
     @property
     def raw_file_names(self):
         return [file for file in os.listdir(self.raw_dir) if "features" in file and file.endswith(".pkl")]

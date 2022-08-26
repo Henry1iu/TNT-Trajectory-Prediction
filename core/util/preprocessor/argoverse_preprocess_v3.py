@@ -136,9 +136,9 @@ class ArgoversePreprocessor(Preprocessor):
         orig = orig.reshape(-1, 2)
 
         # get the target candidates and candidate gt
-        agt_traj_fut = data['trajs'][0].copy().astype(np.float32)
-        agt_traj_obs = agt_traj_fut[0: self.obs_horizon].copy()
-        agt_traj_fut = agt_traj_fut[self.obs_horizon: self.obs_horizon+self.pred_horizon].copy()
+        agt_traj_full = data['trajs'][0].copy().astype(np.float32)
+        agt_traj_obs = agt_traj_full[0: self.obs_horizon].copy()
+        agt_traj_fut = agt_traj_full[self.obs_horizon: self.obs_horizon+self.pred_horizon].copy()
         ctr_line_candts, _ = self.am.get_candidate_centerlines_for_traj(agt_traj_obs, data['city'], viz=False)
 
         # rotate the center lines and find the reference center line
@@ -421,7 +421,7 @@ if __name__ == "__main__":
     # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
     # args.root = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset"
     raw_dir = os.path.join(args.root, "raw_data")
-    interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_small_v3")
+    interm_dir = os.path.join(args.dest, "interm_data" if not args.small else "interm_data_small")
 
     for split in ["train", "val", "test"]:
     # for split in ["test"]:
