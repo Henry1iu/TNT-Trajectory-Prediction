@@ -126,7 +126,7 @@ class ArgoversePreprocessor(Preprocessor):
         orig = data['trajs'][0][self.obs_horizon-1].copy().astype(np.float32)
 
         # comput the rotation matrix
-        pre, conf = self.am.get_lane_direction(data['trajs'][0][self.obs_horizon-1], data['city'])
+        pre, conf, _ = self.am.get_lane_direction_traj(data['trajs'][0], data['city'])
         if conf <= 0.1:
             pre = (orig - data['trajs'][0][self.obs_horizon-4]) / 2.0
         theta = - np.arctan2(pre[1], pre[0]) + np.pi / 2
@@ -418,10 +418,13 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--small", action='store_true', default=False)
     args = parser.parse_args()
 
-    # args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
+    # config for debug
+    args.root = "/home/jb/projects/Code/trajectory-prediction/TNT-Trajectory-Predition/dataset"
     # args.root = "/Users/jb/projects/trajectory_prediction_algorithms/TNT-Trajectory-Predition/dataset"
+    args.small = True
+
     raw_dir = os.path.join(args.root, "raw_data")
-    interm_dir = os.path.join(args.dest, "interm_data" if not args.small else "interm_data_small")
+    interm_dir = os.path.join(args.dest, "interm_data_v3" if not args.small else "interm_data_small_v3")
 
     for split in ["train", "val", "test"]:
     # for split in ["test"]:
@@ -429,7 +432,7 @@ if __name__ == "__main__":
         argoverse_processor = ArgoversePreprocessor(root_dir=raw_dir, split=split, save_dir=interm_dir)
         loader = DataLoader(argoverse_processor,
                             batch_size=1 if sys.gettrace() else 16,     # 1 batch in debug mode
-                            num_workers=0 if sys.gettrace() else 16,    # use only 0 worker in debug mode
+                            num_workers=0 if sys.gettrace() else 12,    # use only 0 worker in debug mode
                             shuffle=False,
                             pin_memory=False,
                             drop_last=False)
