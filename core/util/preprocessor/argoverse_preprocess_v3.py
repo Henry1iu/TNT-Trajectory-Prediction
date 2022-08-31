@@ -32,7 +32,7 @@ from core.util.cubic_spline import Spline2D
 warnings.filterwarnings("ignore")
 
 RESCALE_LENGTH = 1.0    # the rescale length th turn the lane vector into equal distance pieces
-
+COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#7fd0eb", "AV": "#007672"}
 
 class ArgoversePreprocessor(Preprocessor):
     def __init__(self,
@@ -46,7 +46,7 @@ class ArgoversePreprocessor(Preprocessor):
         super(ArgoversePreprocessor, self).__init__(root_dir, algo, obs_horizon, obs_range, pred_horizon)
 
         self.LANE_WIDTH = {'MIA': 3.84, 'PIT': 3.97}
-        self.COLOR_DICT = {"AGENT": "#d33e4c", "OTHERS": "#7fd0eb", "AV": "#007672"}
+        self.COLOR_DICT = COLOR_DICT
 
         self.split = split
 
@@ -71,7 +71,7 @@ class ArgoversePreprocessor(Preprocessor):
         data['graph'] = self.get_lane_graph(data)
         data['seq_id'] = seq_id
         # visualization for debug purpose
-        # self.visualize_data(data)
+        # visualize_data(data)
         return pd.DataFrame(
             [[data[key] for key in data.keys()]],
             columns=[key for key in data.keys()]
@@ -309,40 +309,6 @@ class ArgoversePreprocessor(Preprocessor):
 
         return graph
 
-    def visualize_data(self, data):
-        """
-        visualize the extracted data, and exam the data
-        """
-        fig = plt.figure(0, figsize=(8, 7))
-        fig.clear()
-
-        # visualize the centerlines
-        lines_ctrs = data['graph']['ctrs']
-        lines_feats = data['graph']['feats']
-        lane_idcs = data['graph']['lane_idcs']
-        for i in np.unique(lane_idcs):
-            line_ctr = lines_ctrs[lane_idcs == i]
-            line_feat = lines_feats[lane_idcs == i]
-            line_str = (2.0 * line_ctr - line_feat) / 2.0
-            line_end = (2.0 * line_ctr[-1, :] + line_feat[-1, :]) / 2.0
-            line = np.vstack([line_str, line_end.reshape(-1, 2)])
-            visualize_centerline(line)
-
-        # visualize the trajectory
-        trajs = data['feats'][:, :, :2]
-        has_obss = data['has_obss']
-        preds = data['gt_preds']
-        has_preds = data['has_preds']
-        for i, [traj, has_obs, pred, has_pred] in enumerate(zip(trajs, has_obss, preds, has_preds)):
-            self.plot_traj(traj[has_obs], pred[has_pred], i)
-
-        plt.xlabel("Map X")
-        plt.ylabel("Map Y")
-        plt.axis("off")
-        # plt.show()
-        plt.show(block=False)
-        plt.pause(0.5)
-
     @staticmethod
     def get_ref_centerline(cline_list, pred_gt):
         if len(cline_list) == 1:
@@ -398,6 +364,63 @@ class ArgoversePreprocessor(Preprocessor):
             plt.text(obs[-1, 0], obs[-1, 1], "{}_e".format(traj_na))
         else:
             plt.text(pred[-1, 0], pred[-1, 1], "{}_e".format(traj_na))
+
+
+def visualize_data(data):
+    """
+    visualize the extracted data, and exam the data
+    """
+    fig = plt.figure(0, figsize=(8, 7))
+    fig.clear()
+
+    # visualize the centerlines
+    lines_ctrs = data['graph']['ctrs']
+    lines_feats = data['graph']['feats']
+    lane_idcs = data['graph']['lane_idcs']
+    for i in np.unique(lane_idcs):
+        line_ctr = lines_ctrs[lane_idcs == i]
+        line_feat = lines_feats[lane_idcs == i]
+        line_str = (2.0 * line_ctr - line_feat) / 2.0
+        line_end = (2.0 * line_ctr[-1, :] + line_feat[-1, :]) / 2.0
+        line = np.vstack([line_str, line_end.reshape(-1, 2)])
+        visualize_centerline(line)
+
+    # visualize the trajectory
+    trajs = data['feats'][:, :, :2]
+    has_obss = data['has_obss']
+    preds = data['gt_preds']
+    has_preds = data['has_preds']
+    for i, [traj, has_obs, pred, has_pred] in enumerate(zip(trajs, has_obss, preds, has_preds)):
+        plot_traj(traj[has_obs], pred[has_pred], i, COLOR_DICT)
+
+    # visualize the target candidate
+    candidates = data['tar_candts']
+    candidate_gt = data['tar_candts_gt']
+    plt.scatter(candidates[:, 0], candidates[:, 1], marker="*", c="g", alpha=1, s=6.0, zorder=15)
+    plt.scatter(candidates[candidate_gt, 0], candidates[candidate_gt, 0], marker="o", c="r", alpha=1, s=3.0, zorder=15)
+
+    plt.xlabel("Map X")
+    plt.ylabel("Map Y")
+    plt.axis("off")
+    # plt.show()
+    plt.show(block=False)
+    plt.pause(0.5)
+
+
+def plot_traj(obs, pred, COLOR_DICT, traj_id=None):
+    assert len(obs) != 0, "ERROR: The input trajectory is empty!"
+    traj_na = "t{}".format(traj_id) if traj_id else "traj"
+    obj_type = "AGENT" if traj_id == 0 else "OTHERS"
+
+    plt.plot(obs[:, 0], obs[:, 1], color=COLOR_DICT[obj_type], alpha=1, linewidth=1, zorder=15)
+    plt.plot(pred[:, 0], pred[:, 1], "d-", color=COLOR_DICT[obj_type], alpha=1, linewidth=1, zorder=15)
+
+    plt.text(obs[0, 0], obs[0, 1], "{}_s".format(traj_na))
+
+    if len(pred) == 0:
+        plt.text(obs[-1, 0], obs[-1, 1], "{}_e".format(traj_na))
+    else:
+        plt.text(pred[-1, 0], pred[-1, 1], "{}_e".format(traj_na))
 
 
 def ref_copy(data):

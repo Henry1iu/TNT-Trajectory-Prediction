@@ -216,13 +216,14 @@ class TNTTrainer(Trainer):
 
     def compute_loss(self, data):
         n = data.candidate_len_max[0]
-        data.y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
+        y = data.y.view(-1, self.horizon, 2).cumsum(axis=1)
+
         pred, aux_out, aux_gt = self.model(data)
 
         gt = {
             "target_prob": data.candidate_gt.view(-1, n),
             "offset": data.offset_gt.view(-1, 2),
-            "y": data.y.view(-1, self.horizon * 2)
+            "y": y.view(-1, self.horizon * 2)
         }
 
         return self.criterion(pred, gt, aux_out, aux_gt)
@@ -267,8 +268,8 @@ class TNTTrainer(Trainer):
 
                 # inference and transform dimension
                 if self.multi_gpu:
-                    out = self.model.module(data.to(self.device))
-                    # out = self.model.inference(data.to(self.device))
+                    # out = self.model.module(data.to(self.device))
+                    out = self.model.inference(data.to(self.device))
                 else:
                     out = self.model.inference(data.to(self.device))
                 dim_out = len(out.shape)

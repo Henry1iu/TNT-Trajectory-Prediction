@@ -416,11 +416,12 @@ if __name__ == "__main__":
 
     # for folder in os.listdir("./data/interm_data"):
     # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_2022"
-    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_small_v3"
-    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3"
+    # INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_small_v3"
+    INTERMEDIATE_DATA_DIR = "../../dataset/interm_data_v3"
 
-    for folder in ["train", "val", "test"]:
-    # for folder in ["test"]:
+    # for folder in ["train", "val", "test"]:
+    # for folder in ["train", "val"]:
+    for folder in ["test"]:
         dataset_input_path = os.path.join(INTERMEDIATE_DATA_DIR, f"{folder}_intermediate")
 
         # dataset = Argoverse(dataset_input_path)
