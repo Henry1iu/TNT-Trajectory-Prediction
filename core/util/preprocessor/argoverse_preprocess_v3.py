@@ -151,7 +151,7 @@ class ArgoversePreprocessor(Preprocessor):
         tar_candts = self.lane_candidate_sampling(ctr_line_candts, self.LANE_WIDTH[city], viz=False)
 
         if self.split == "test":
-            tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((1, 2))
+            tar_candts_gt, tar_offse_gt = np.zeros((tar_candts.shape[0], 1)), np.zeros((2,))
         else:
             tar_candts_gt, tar_offse_gt = self.get_candidate_gt(tar_candts, agt_traj_fut[-1])
 

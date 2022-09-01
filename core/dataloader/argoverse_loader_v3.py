@@ -165,6 +165,8 @@ class ArgoverseInMem(InMemoryDataset):
             data.identifier = torch.matmul(rot, data.identifier.transpose(0, 1)).transpose(0, 1)
 
             data.candidate = torch.matmul(rot, data.candidate.transpose(0, 1)).transpose(0, 1)
+            data.target_gt = torch.matmul(rot, data.target_gt)
+            data.offset_gt = torch.matmul(rot, data.offset_gt)
 
             y = data.y.unsqueeze(1).view(1, -1, 2).squeeze(0).transpose(0, 1)
             data.y = torch.matmul(rot, y).transpose(0, 1).reshape(1, -1)

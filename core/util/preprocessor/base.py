@@ -148,7 +148,7 @@ class Preprocessor(Dataset):
         """
         find the target candidate closest to the gt and output the one-hot ground truth
         :param target_candidate, (N, 2) candidates
-        :param gt_target, (1, 2) the coordinate of final target
+        :param gt_target, (2, ) the coordinate of final target
         """
         displacement = gt_target - target_candidate
         gt_index = np.argmin(np.power(displacement[:, 0], 2) + np.power(displacement[:, 1], 2))
