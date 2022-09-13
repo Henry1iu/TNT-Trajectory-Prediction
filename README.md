@@ -83,7 +83,7 @@ If you store the raw data at a different location, you can change relative path 
 > **Reminding**: Change the mode of the bash file with "chmod +x scripts/preprocessing.sh" before running the script for the first time.
 
 An example of the processed dataset(small) is available 
-[here](https://mycuhk-my.sharepoint.com/:u:/g/personal/1155071948_link_cuhk_edu_hk/EYeiw6f23zRJtag-zm2fH2kBXYEIpjScP6dH7TK-XaVamQ?e=s12xoz).
+[here](https://mycuhk-my.sharepoint.com/:u:/g/personal/1155071948_link_cuhk_edu_hk/EWv6Dec3yqhPkZLgdw9eEt0Bso2K-ef1-7UOzklwc4NDPQ?e=2TIBGX).
 Download it to check if your environment is configured appropriately. 
 
 ## Usage
