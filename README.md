@@ -58,7 +58,7 @@ pip install -r requirements.txt
 ```
 
 ### Data Preparation
-Please download the [Argoverse Motion Forecasting v1.1](https://www.argoverse.org/data.html#forecasting-link) and extract 
+Please download the [Argoverse Motion Forecasting v1.1](https://www.argoverse.org/av1.html#forecasting-link) and extract 
 the compressed data to the "raw_datas" folder as stored in the following directory structure:
 ```latex
 ├── TNT-Trajectory-Prediction
