@@ -45,7 +45,7 @@ This implementation has been tested on Ubuntu 18.04 and has the following requir
   * pytorch-scatter == 2.0.7           
   * pytorch-sparse == 0.6.10         
   * pytorch-spline-conv == 1.2.1
-* pandas == 1.0.0
+* pandas == 1.4.4
 * tqdm == 4.60.0
 * tensorboard
 * (Optianl) [nvidia-apex](https://github.com/NVIDIA/apex) == 1.0
