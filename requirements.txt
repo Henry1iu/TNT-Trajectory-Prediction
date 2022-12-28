@@ -4,7 +4,7 @@ matplotlib==3.4.1
 numpy==1.22
 numpy-quaternion==2021.4.5.14.42.35
 opencv-python==4.5.1.48
-pandas==1.2.4
+pandas==1.4.4
 Pillow==9.1.1
 protobuf==3.17.3
 pyparsing==2.4.7
