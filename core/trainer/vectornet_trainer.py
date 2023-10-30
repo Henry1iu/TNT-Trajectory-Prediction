@@ -97,7 +97,7 @@ class VectorNetTrainer(Trainer):
             with_aux=aux_loss,
             device=self.device
         )
-        self.criterion = VectorLoss(aux_loss, reduction="sum")
+        self.criterion = VectorLoss(aux_loss=aux_loss, reduction="sum")
 
         # init optimizer
         self.optim = AdamW(self.model.parameters(), lr=self.lr, betas=self.betas, weight_decay=self.weight_decay)
